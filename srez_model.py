@@ -663,7 +663,7 @@ def Fourier(x, separate_complex=True):
     return y_complex
 
 
-'''
+
 def _generator_encoder_decoder(sess, features, labels, channels, layer_output_skip=5):
     print('use encoder decoder model')
     # old variables
@@ -717,7 +717,7 @@ def _generator_encoder_decoder(sess, features, labels, channels, layer_output_sk
             else:
                 input = tf.concat(axis=3, values=[layer[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
 
-            rectified = tf.nn.relu(input)
+            rectified  = tf.nn.relu(input)
             # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
             output = deconv(rectified, out_channels)
             output = batchnorm(output)
@@ -739,6 +739,11 @@ def _generator_encoder_decoder(sess, features, labels, channels, layer_output_sk
         output = tf.nn.sigmoid(output)
         layers.append(output)
 
+    #hard data consistency
+    masks_comp = 1.0 - masks
+    correct_kspace = downsample(labels, masks) + downsample(output, masks_comp)
+    correct_image = upsample(correct_kspace, masks)
+    model.add_layer(correct_image)
 
     # out variables
     new_vars  = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
@@ -822,7 +827,7 @@ def _generator_model_with_pool(sess, features, labels, channels, layer_output_sk
     output_layers = [model.outputs[0]] + model.outputs[1:-1][::layer_output_skip] + [model.outputs[-1]]
 
     return model.get_output(), gene_vars, output_layers
-'''
+
 
 def _generator_model_with_scale(sess, features, labels, masks, channels, layer_output_skip=5,
                                 num_dc_layers=0):
@@ -1168,6 +1173,8 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
     gene_minput = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, rows, cols, channels])
     label_minput = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, rows, cols, channels])
+
+    architecture = 'aec' #only deal with the autoencoder
 
 
     # TBD: Is there a better way to instance the generator?

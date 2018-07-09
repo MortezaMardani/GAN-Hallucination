@@ -108,6 +108,9 @@ def setup_inputs_one_sources(sess, filenames_input, filenames_output, image_size
     image_input_phase = tf.cast(8*tf.constant(math.pi), tf.complex64)*tf.cast(image_input[0:image_size[0],image_size[1]:2*image_size[1]], tf.complex64)
     image_input = tf.multiply(image_input_mag, tf.exp(tf.sqrt(tf.cast(-1,tf.complex64))*image_input_phase))
     image_input = tf.cast(image_input, tf.complex64)
+
+    image_input = image_input_mag  #remove phase component
+
     image_input = image_input / 255.0 #tf.cast(tf.reduce_max(tf.abs(image_input)), tf.complex64)
  
     print('image_input_complex', image_input.get_shape())
