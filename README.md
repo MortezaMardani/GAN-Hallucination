@@ -16,7 +16,7 @@ python3  srez_main.py
 --sample_test -1   
 --sample_train -1     
 --subsample_test 1000   
---subsample_train 10000  
+--subsample_train 1000 
 --train_time 3000   
 --train_dir  results/
 --checkpoint_dir  checkpoints/
