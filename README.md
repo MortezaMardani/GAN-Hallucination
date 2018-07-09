@@ -1,15 +1,15 @@
 # GAN-Hallucination
-This projects investigates the possible hallucinations or adversarial attacks for solving linear inverse problems. The goal is to understand the possible hallucinations, define metrics to quantify the hallucination, and find regularization techniques to make deep reconstruction nets robust against hallucination.
+This project investigates the possible "hallucinations" that can be generated when solving linear inverse problems in the realm of medical imaging. The goal is to find such hallucinations, define metrics to quantify them, and identify regularization techniques to make deep neural net reconstructions robust against this sort of artifact creation.
 
 
 # command to run 
 
 python3  srez_main.py    
 --run train     
---dataset_train /path/to/train/dataset      
---dataset_test /path/to/test/dataset    
---sampling_pattern  /path/to/sampling/pattern/mat/file     
---sample_size 256   
+--dataset_train /Data/Knee-highresolution-19cases/train   
+--dataset_test /Data/Knee-highresolution-19cases/test
+--sampling_pattern  /Data/Knee-highresolution-19cases/sampling_pattern/mask_2fold_160_128_knee_vdrad.mat     
+--sample_size 160   
 --sample_size_y 128    
 --batch_size 2     
 --summary_period  20000      
@@ -18,9 +18,9 @@ python3  srez_main.py
 --subsample_test 1000   
 --subsample_train 10000  
 --train_time 3000   
---train_dir  /path/to/train/directory/save/results
---checkpoint_dir  /path/to/checkpoint/directory
---tensorboard_dir  /path/to/tensorboard
+--train_dir  /results
+--checkpoint_dir  /checkpoints
+--tensorboard_dir  /tensorboard
 --gpu_memory_fraction 1.0  
 --hybrid_disc 0    
 --starting_batch 0
