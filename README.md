@@ -1,5 +1,5 @@
 # GAN-Hallucination
-This project investigates the possible "hallucinations" that can be generated when solving linear inverse problems in the realm of medical imaging. The goal is to find such hallucinations, define metrics to quantify them, and identify regularization techniques to make deep reconstruction neural nets robust against this sort of artifact creation.
+This project investigates the possible "hallucinations" that can be generated when solving linear inverse problems in the realm of medical imaging. The goal is to find such hallucinations, define metrics to quantify them, and identify regularization techniques to make deep neural net reconstructions robust against this sort of artifact creation.
 
 
 # command to run 
