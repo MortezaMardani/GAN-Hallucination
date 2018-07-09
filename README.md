@@ -6,9 +6,9 @@ This project investigates the possible "hallucinations" that can be generated wh
 
 python3  srez_main.py    
 --run train     
---dataset_train /Data/Knee-highresolution-19cases/train   
---dataset_test /Data/Knee-highresolution-19cases/test
---sampling_pattern  /Data/Knee-highresolution-19cases/sampling_pattern/mask_2fold_160_128_knee_vdrad.mat     
+--dataset_train Data/Knee-highresolution-19cases/train/   
+--dataset_test Data/Knee-highresolution-19cases/test/
+--sampling_pattern  Data/Knee-highresolution-19cases/sampling_pattern/mask_2fold_160_128_knee_vdrad.mat     
 --sample_size 160   
 --sample_size_y 128    
 --batch_size 2     
@@ -18,9 +18,9 @@ python3  srez_main.py
 --subsample_test 1000   
 --subsample_train 10000  
 --train_time 3000   
---train_dir  /results
---checkpoint_dir  /checkpoints
---tensorboard_dir  /tensorboard
+--train_dir  results/
+--checkpoint_dir  checkpoints/
+--tensorboard_dir  tensorboard/
 --gpu_memory_fraction 1.0  
 --hybrid_disc 0    
 --starting_batch 0
