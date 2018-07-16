@@ -85,7 +85,7 @@ def downsample(x, mask):
 def upsample(x, mask):
 
     image_complex = tf.ifft2d(x)
-    image_size = [FLAGS.batch_size, 256, 128] #tf.shape(image_complex)
+    image_size = [FLAGS.batch_size, FLAGS.sample_size, FLAGS.sample_size_y] #tf.shape(image_complex)
 
     #get real and imaginary parts
     image_real = tf.reshape(tf.real(image_complex), [image_size[0], image_size[1], image_size[2], 1])
@@ -534,6 +534,10 @@ class Model:
         return tf.get_collection(tf.GraphKeys.VARIABLES, scope=scope)
 
 
+    def gradients_out_in(output,input_img):
+        return tf.gradients(output, input_img)
+
+
 
 
 def _discriminator_model(sess, features, disc_input, layer_output_skip=5, hybrid_disc=0):
@@ -664,7 +668,7 @@ def Fourier(x, separate_complex=True):
 
 
 
-def _generator_encoder_decoder(sess, features, labels, channels, layer_output_skip=5):
+def _generator_encoder_decoder(sess, features, labels, masks,channels = 2, layer_output_skip=5):
     print('use encoder decoder model')
     # old variables
     layers = []    
@@ -696,6 +700,21 @@ def _generator_encoder_decoder(sess, features, labels, channels, layer_output_sk
             output = batchnorm(convolved)
             layers.append(output)
 
+    
+    ###  LATENT SPACE
+
+    #latent_code = layers[-1]
+    #print("Latent code shape is:")
+    #print(latent_code.shape)
+
+
+
+
+
+
+    ###
+
+
     layer_specs = [
         # (num_filter_generator * 16, 0.5),   # decoder_8: [batch, 1, 1, ngf * 8] => [batch, 2, 2, ngf * 8 * 2]
         # (num_filter_generator * 8, 0.5),   # decoder_7: [batch, 2, 2, ngf * 8 * 2] => [batch, 4, 4, ngf * 8 * 2]
@@ -715,7 +734,7 @@ def _generator_encoder_decoder(sess, features, labels, channels, layer_output_sk
                 # since it is directly connected to the skip_layer
                 input = layers[-1]
             else:
-                input = tf.concat(axis=3, values=[layer[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
+                input = tf.concat(axis=3, values=[layers[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
 
             rectified  = tf.nn.relu(input)
             # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
@@ -728,22 +747,32 @@ def _generator_encoder_decoder(sess, features, labels, channels, layer_output_sk
             layers.append(output)
 
     # decoder_1: [batch, 128, 128, ngf * 2] => [batch, 256, 256, generator_outputs_channels]
+
+
+
+    with tf.variable_scope("decoder_1"):
+        input = tf.concat(axis=3, values=[layers[-1], layers[0]]) #, axis=3)
+       #rectified = tf.nn.relu(input)
+        #output = deconv(rectified, channels)
+        output = deconv(input,channels)
+        #output = tf.nn.sigmoid(output)
+        layers.append(output)
+
     for x in layers:
         print(x)
 
-    with tf.variable_scope("decoder_1"):
-        input = tf.concat(axis=3, values=[layer[-1], layers[0]]) #, axis=3)
-        rectified = tf.nn.relu(input)
-        output = deconv(rectified, channels)
-        # output = tf.tanh(output)
-        output = tf.nn.sigmoid(output)
-        layers.append(output)
-
     #hard data consistency
+
+    
     masks_comp = 1.0 - masks
-    correct_kspace = downsample(labels, masks) + downsample(output, masks_comp)
+    correct_kspace = downsample(labels, masks) + downsample(layers[-1], masks_comp)
     correct_image = upsample(correct_kspace, masks)
-    model.add_layer(correct_image)
+    layers.append(correct_image)
+    #layers[-1] = layers[-1] * correct_image
+    #print("Dimensions")
+    #print(correct_image.shape)
+    #model.add_layer(correct_image)
+
 
     # out variables
     new_vars  = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
@@ -752,7 +781,14 @@ def _generator_encoder_decoder(sess, features, labels, channels, layer_output_sk
     # select subset of layers
     output_layers = [layers[0]] + layers[1:-1][::layer_output_skip] + [layers[-1]]
 
+    #adversarial_gradients = gradients_out_in(layers[-1],features)
+
+
     return layers[-1], gene_vars, output_layers
+
+
+
+"""
 
 def _generator_model_with_pool(sess, features, labels, channels, layer_output_skip=5):
     mapsize = 3
@@ -828,7 +864,9 @@ def _generator_model_with_pool(sess, features, labels, channels, layer_output_sk
 
     return model.get_output(), gene_vars, output_layers
 
+"""
 
+'''
 def _generator_model_with_scale(sess, features, labels, masks, channels, layer_output_skip=5,
                                 num_dc_layers=0):
     
@@ -884,7 +922,7 @@ def _generator_model_with_scale(sess, features, labels, masks, channels, layer_o
     model.add_layer(correct_image)
     
     
-    '''
+    
     #inexact data consistency. can be repeated using a for loop
     output_neg = -1*output
     model.add_layer(output_neg)
@@ -893,7 +931,7 @@ def _generator_model_with_scale(sess, features, labels, masks, channels, layer_o
     model.add_upsample(masks)
     model.add_scale(stddev_factor=1.)
     model.add_sum(output)
-    '''    
+       
 
     ##inexact affine projection
     #ww = 0.01
@@ -911,8 +949,7 @@ def _generator_model_with_scale(sess, features, labels, masks, channels, layer_o
 
     return model.get_output(), gene_vars, output_layers
 
-
-
+'''
 '''
 def _generator_model_with_scale_modf(sess, features, labels, masks, channels, layer_output_skip=5,
                                 num_dc_layers=0):
@@ -1204,6 +1241,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     mask_list = []
     mask_list_0 = []
     eta = []
+
     kappa = []
     nmse = []
 
@@ -1215,26 +1253,26 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         for i in range(FLAGS.num_iteration):
 
              #train
-             gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks, 1)
+             gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
 
              scope.reuse_variables()
              #test
-             gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks, 1)
+             gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
              #mask_list.append(gene_mlayers[3])
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0 = function_generator(sess, label_minput, label_minput, masks, 1)
+             gene_moutput_0, _ , gene_mlayers_0 = function_generator(sess, label_minput, label_minput, masks)
              #mask_list_0 = gene_mlayers_0[3]
 
-             nmse_t = tf.square(tf.divide(tf.norm(gene_moutput - labels), tf.norm(labels)))
-             nmse.append(nmse_t)
-             kappa_t = tf.divide(tf.norm(gene_moutput - labels), tf.norm(gene_mlayers[0] - labels))
-             kappa.append(kappa_t)
+             #nmse_t = tf.square(tf.divide(tf.norm(gene_moutput - labels), tf.norm(labels)))
+             #nmse.append(nmse_t)
+             #kappa_t = tf.divide(tf.norm(gene_moutput - labels), tf.norm(gene_mlayers[0] - labels))
+             #kappa.append(kappa_t)
 
              ##convergence rate kappa_t = ||x_{t+1}-x_*||/||x_t-x_*||
              #kappa_t = tf.divide(tf.norm(gene_mlayers[4] - labels), tf.norm(gene_mlayers[0] - labels))
@@ -1493,6 +1531,8 @@ def create_optimizers(gene_loss, gene_var_list,
     capped_grads_and_vars = [(tf.clip_by_value(gv[0], -1000000000., 1000000000.), gv[1]) for gv in grads_and_vars]
     gene_minimize = gene_opti.apply_gradients(capped_grads_and_vars)
     
+
+
 
     ##method 2
     #print(gene_opti)

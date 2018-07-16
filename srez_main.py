@@ -135,7 +135,7 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
 tf.app.flags.DEFINE_float('learning_beta1', 0.9,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.00001,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.001,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 50000,
@@ -212,7 +212,11 @@ tf.app.flags.DEFINE_integer('hybrid_disc', 0,
 
 tf.app.flags.DEFINE_string('architecture','resnet',
                             "model arch used for generator, ex: resnet, aec, pool")
+global real_img
+global recon_img
+global latent_space
 
+real_img = 0
 
 def mkdirp(path):
     try:
@@ -392,7 +396,8 @@ def _train():
 
     # Separate training and test sets (SEPARATE FOLDERS)
     train_filenames_input = filenames_input_train[:FLAGS.sample_train]    
-    train_filenames_output = filenames_output_train[:FLAGS.sample_train]            
+    train_filenames_output = filenames_output_train[:FLAGS.sample_train]  
+
     test_filenames_input  = filenames_input_test[:FLAGS.sample_test]
     test_filenames_output  = filenames_output_test[:FLAGS.sample_test]
     #print('test_filenames_input', test_filenames_input)
@@ -408,6 +413,7 @@ def _train():
 
     # randomly subsample for train
     if FLAGS.subsample_train > 0:
+
         index_sample_train_selected = random.sample(range(len(train_filenames_input)), FLAGS.subsample_train)
         if not FLAGS.permutation_train:
             index_sample_train_selected = sorted(index_sample_train_selected)
@@ -496,6 +502,8 @@ def _train():
     filename = 'checkpoint_new.txt'
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
+    
+    """
     if tf.gfile.Exists(metafile):
         saver = tf.train.Saver()
         print("Loading checkpoint from file `%s'" % (filename,))
@@ -503,11 +511,14 @@ def _train():
     else:
         print("No checkpoint `%s', train from scratch" % (filename,))
         sess.run(tf.global_variables_initializer())
+"""
+    print("No checkpoint `%s', train from scratch" % (filename,))
+    sess.run(tf.global_variables_initializer())
 
 
     # Train model
     train_data = TrainData(locals())
-    srez_train.train_model(train_data, num_sample_train, num_sample_test)
+    srez_train.train_model(sess,train_data, num_sample_train, num_sample_test)
 
 def main(argv=None):
     # Training or showing off?

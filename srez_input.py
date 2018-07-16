@@ -1,3 +1,4 @@
+
 import tensorflow as tf
 import numpy as np
 import math as math
@@ -92,11 +93,12 @@ def setup_inputs_one_sources(sess, filenames_input, filenames_output, image_size
     key, value_input = reader_input.read(filename_queue_input)
     channels = 3
     image_input = tf.image.decode_jpeg(value_input, channels=channels, name="input_image")
-    image_input.set_shape([image_size[0], 2*image_size[0], channels])
+    image_input.set_shape([image_size[0], 2*image_size[1], channels])
 
     print('size_input_image', image_input.get_shape())
 
     image_input = image_input[:,:,-1]   
+
 
     '''
     Seperate coil sensitivities and images ...............
@@ -110,6 +112,9 @@ def setup_inputs_one_sources(sess, filenames_input, filenames_output, image_size
     image_input = tf.cast(image_input, tf.complex64)
 
     image_input = image_input_mag  #remove phase component
+
+    print(image_input.shape)
+    #image_input = tf.image.resize_images(image_input, [FLAGS.sample_size / 2, FLAGS.sample_size_y / 2])
 
     image_input = image_input / 255.0 #tf.cast(tf.reduce_max(tf.abs(image_input)), tf.complex64)
  

@@ -6,13 +6,22 @@ import time
 import json
 from scipy.io import savemat
 
+from tensorflow.contrib.tensorboard.plugins import projector
+
+
 FLAGS = tf.app.flags.FLAGS
 # FLAGS.sample_size_y = FLAGS.sample_size if FLAGS.sample_size_y<0
 OUTPUT_TRAIN_SAMPLES = 0
 
-def _summarize_progress(train_data, feature, label, gene_output, gene_output_list, eta, nmse, kappa, batch, suffix, max_samples=2, gene_param=None):
+def compute_SNR(gt, recon):
+    first_term =  np.linalg.norm(gt)
+    second_term = np.linalg.norm((gt - recon))
+    #result = 20 * np.log10(first_term/second_term)
+    result = -20 * np.log10(second_term/first_term)
+    return result
 
-    
+def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, gene_output, gene_output_list, eta, nmse, kappa, batch, suffix, max_samples=2, gene_param=None):
+
     td = train_data
 
     size = [label.shape[1], label.shape[2]]
@@ -58,6 +67,75 @@ def _summarize_progress(train_data, feature, label, gene_output, gene_output_lis
     print("    Saved %s" % (filename,))
 
 
+
+    # Add the batch dimension
+    dim1, dim2, dim3 = image.shape
+    
+    point1 = dim1 // 2
+    point2 = dim2 // 2
+    point3 = 3*(dim2 // 4)
+
+    recon_img = image[:point1,point2:point3,:]
+    real_img = image[:point1,point3:,:]
+
+    SNR = compute_SNR(real_img, recon_img)
+    print("Calculated SNR is:")
+    print(SNR)
+
+
+
+
+    #print(tf.trainable_variables())
+    #var = [v for v in tf.trainable_variables() if v.name == "gene_layer/encoder_5_2/batchnorm/batchnorm/add_1:0"][0]
+    latent = tf.get_default_graph().get_tensor_by_name('gene_layer/encoder_5_2/batchnorm/batchnorm/add_1:0')
+    print(latent)
+
+    ### LATENT SPACE HERE
+    latent_space = td.sess.run(latent,feed_dict = feed_dict)
+    print(latent_space.shape)
+    print(type(latent_space))
+
+    logs_path = 'tensorboard'
+    with open(os.path.join(logs_path, "s-metadata.tsv"), 'w') as metadata_file:
+        for row in range(2):
+            c = row
+            metadata_file.write('{}\n'.format(c))
+
+    metadata = 's-metadata.tsv'
+
+    images = tf.Variable(latent_space, name= 'images')
+    sess.run(tf.global_variables_initializer())
+
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = images.name
+    embedding.metadata_path = metadata
+    summary_writer = tf.summary.FileWriter(logs_path)
+    projector.visualize_embeddings(summary_writer,config)
+
+    print(real_img.shape)
+    print(recon_img.shape)
+
+    temp = tf.reshape(image,[1,dim1,dim2,dim3])
+
+    filename = 'batch%06d_%s.png' % (batch, suffix)
+    summary_op = tf.summary.image(filename, temp) 
+    summary_run = td.sess.run(summary_op) 
+    sum_writer.add_summary(summary_run,1)
+
+
+"""
+    filename = 'latent_batch%06d_%s.out' % (batch, suffix)
+    filename = os.path.join('latent_arrays',filename)
+    latent_space.tofile(filename)
+
+    """
+
+
+    ###
+
+
+"""
     if gene_param is not None:
         #add feature 
         print('dimension for input, ref, output:',
@@ -80,7 +158,7 @@ def _summarize_progress(train_data, feature, label, gene_output, gene_output_lis
         with open(filename, 'w') as outfile:
             json.dump(gene_param, outfile)
         print("    Saved %s" % (filename,))
-
+"""
 
 def _save_checkpoint(train_data, batch):
     td = train_data
@@ -111,7 +189,7 @@ def _save_checkpoint(train_data, batch):
 
     print("Checkpoint saved")
 
-def train_model(train_data, num_sample_train=1984, num_sample_test=116):
+def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     
     td = train_data
     summary_op = td.summary_op
@@ -133,6 +211,7 @@ def train_model(train_data, num_sample_train=1984, num_sample_test=116):
 
     # batch info    
     batch_size = FLAGS.batch_size
+
     num_batch_train = num_sample_train / batch_size
     num_batch_test = num_sample_test / batch_size            
 
@@ -201,11 +280,12 @@ def train_model(train_data, num_sample_train=1984, num_sample_test=116):
             # Update learning rate
             if batch % FLAGS.learning_rate_half_life == 0:
                 lrval *= .5
-
         # export test batches
+
         if batch % FLAGS.summary_period == 0:
             # loop different test batch
             for index_batch_test in range(int(num_batch_test)):
+
                 # get test feature
                 test_feature = list_test_features[index_batch_test]
                 test_label = list_test_labels[index_batch_test]
@@ -247,7 +327,8 @@ def train_model(train_data, num_sample_train=1984, num_sample_test=116):
                 # gene layers are too large
                 #if index_batch_test>0:
                     #gene_param['gene_layers']=[]
-                _summarize_progress(td, test_feature, test_label, gene_output, gene_output_list, eta, nmse, kappa, batch,  
+                print("at summarizing stage")
+                _summarize_progress(sess,feed_dict,sum_writer,td, test_feature, test_label, gene_output, gene_output_list, eta, nmse, kappa, batch,  
                                     'test{0}'.format(index_batch_test),                                     
                                     max_samples = FLAGS.batch_size,
                                     gene_param = gene_param)
@@ -264,9 +345,11 @@ def train_model(train_data, num_sample_train=1984, num_sample_test=116):
                    td.train_features, td.train_labels, td.gene_output]#, td.gene_var_list, td.gene_layers]
             _, _, gene_loss, gene_dc_loss, gene_ls_loss, disc_real_loss, disc_fake_loss, train_feature, train_label, train_output, mask = td.sess.run(ops, feed_dict=feed_dict)
             print('train sample size:',train_feature.shape, train_label.shape, train_output.shape)
-            _summarize_progress(td, train_feature, train_label, train_output, batch%num_batch_train, 'train')
+            _summarize_progress(sess,feed_dict,sum_writer,td, train_feature, train_label, train_output, batch%num_batch_train, 'train')
 
         
+        
+
         # export check points
         if batch % FLAGS.checkpoint_period == 0:
             # Save checkpoint
