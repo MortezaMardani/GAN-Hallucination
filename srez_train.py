@@ -95,6 +95,13 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     print(latent_space.shape)
     print(type(latent_space))
 
+    
+    filename = 'latent_batch%06d_%s.out' % (batch, suffix)
+    filename = os.path.join('latent_arrays',filename)
+    np.save(filename,latent_space)
+
+    
+
     logs_path = 'tensorboard'
     with open(os.path.join(logs_path, "s-metadata.tsv"), 'w') as metadata_file:
         for row in range(2):
@@ -107,11 +114,15 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     sess.run(tf.global_variables_initializer())
 
     config = projector.ProjectorConfig()
+    config.model_checkpoint_path = logs_path
     embedding = config.embeddings.add()
     embedding.tensor_name = images.name
     embedding.metadata_path = metadata
-    summary_writer = tf.summary.FileWriter(logs_path)
-    projector.visualize_embeddings(summary_writer,config)
+    projector.visualize_embeddings(sum_writer,config)
+
+    sess.run(tf.global_variables_initializer())
+    saver = tf.train.Saver()
+    saver.save(sess, os.path.join(logs_path, "model.ckpt"), 1)
 
     print(real_img.shape)
     print(recon_img.shape)
@@ -124,12 +135,7 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     sum_writer.add_summary(summary_run,1)
 
 
-"""
-    filename = 'latent_batch%06d_%s.out' % (batch, suffix)
-    filename = os.path.join('latent_arrays',filename)
-    latent_space.tofile(filename)
 
-    """
 
 
     ###
@@ -291,7 +297,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
                 test_label = list_test_labels[index_batch_test]
             
                 # Show progress with test features
-                feed_dict = {td.gene_minput: test_feature, td.label_minput: test_label}
+                feed_dict = {td.gene_minput: test_feature, td.label_minput: test_label,td.train_phase: False}
                 # not export var
                 # ops = [td.gene_moutput, td.gene_mlayers, td.gene_var_list, td.disc_var_list, td.disc_layers]
                 # gene_output, gene_layers, gene_var_list, disc_var_list, disc_layers= td.sess.run(ops, feed_dict=feed_dict)       
@@ -341,6 +347,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         # export train batches
         if OUTPUT_TRAIN_SAMPLES and (batch % FLAGS.summary_train_period == 0):
             # get train data
+            feed_dict['train_phase'] = True
             ops = [td.gene_minimize, td.disc_minimize, td.gene_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, 
                    td.train_features, td.train_labels, td.gene_output]#, td.gene_var_list, td.gene_layers]
             _, _, gene_loss, gene_dc_loss, gene_ls_loss, disc_real_loss, disc_fake_loss, train_feature, train_label, train_output, mask = td.sess.run(ops, feed_dict=feed_dict)

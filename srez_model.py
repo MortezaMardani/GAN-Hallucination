@@ -668,7 +668,7 @@ def Fourier(x, separate_complex=True):
 
 
 
-def _generator_encoder_decoder(sess, features, labels, masks,channels = 2, layer_output_skip=5):
+def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channels = 2, layer_output_skip=5):
     print('use encoder decoder model')
     # old variables
     layers = []    
@@ -713,6 +713,15 @@ def _generator_encoder_decoder(sess, features, labels, masks,channels = 2, layer
 
 
     ###
+    #train_phase = tf.placeholder_with_default(True, shape=())
+    noise = np.random.normal(0,1,layers[-1].shape) 
+    def f1(): return tf.identity(layers[-1])
+    def f2(): return tf.add(layers[-1], noise)
+    
+    layers[-1] = tf.cond(train_phase, f1, f2)
+
+
+
 
 
     layer_specs = [
@@ -1210,13 +1219,15 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
     gene_minput = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, rows, cols, channels])
     label_minput = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, rows, cols, channels])
+    train_phase = tf.placeholder_with_default(True, shape=())
+
 
     architecture = 'aec' #only deal with the autoencoder
 
 
     # TBD: Is there a better way to instance the generator?
     if architecture == 'aec':
-        function_generator = lambda x,y,z,w: _generator_encoder_decoder(x,y,z,w)
+        function_generator = lambda x,y,z,w,t: _generator_encoder_decoder(x,y,z,w,t)
     elif architecture == 'pool':
         function_generator = lambda x,y,z,w: _generator_model_with_pool(x,y,z,w)
     elif architecture.startswith('var'):
@@ -1253,20 +1264,20 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         for i in range(FLAGS.num_iteration):
 
              #train
-             gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks)
+             gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks,train_phase)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
 
              scope.reuse_variables()
              #test
-             gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks)
+             gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
              #mask_list.append(gene_mlayers[3])
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0 = function_generator(sess, label_minput, label_minput, masks)
+             gene_moutput_0, _ , gene_mlayers_0 = function_generator(sess, label_minput, label_minput, masks,train_phase)
              #mask_list_0 = gene_mlayers_0[3]
 
              #nmse_t = tf.square(tf.divide(tf.norm(gene_moutput - labels), tf.norm(labels)))
@@ -1309,7 +1320,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
     return [gene_minput, label_minput, gene_moutput, gene_moutput_list,
             gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
-            disc_real_output, disc_fake_output, disc_var_list, disc_layers, eta, nmse, kappa]   
+            disc_real_output, disc_fake_output, disc_var_list, train_phase,disc_layers, eta, nmse, kappa]   
 
 
 # SSIM

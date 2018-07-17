@@ -317,7 +317,7 @@ def _demo():
     # Create and initialize model
     [gene_minput, gene_moutput,
      gene_output, gene_var_list,
-     disc_real_output, disc_fake_output, disc_var_list] = \
+     disc_real_output, disc_fake_output, disc_var_list,train_phase] = \
             srez_model.create_model(sess, features, labels, masks)
 
     # Restore variables from checkpoint
@@ -481,9 +481,11 @@ def _train():
     # Create and initialize model
     [gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
-     disc_real_output, disc_fake_output, disc_var_list, disc_layers, eta, nmse, kappa] = \
+     disc_real_output, disc_fake_output, disc_var_list, train_phase,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
 
+    train_phase = tf.placeholder(tf.bool, [])
+    
     gene_loss, gene_dc_loss, gene_ls_loss, gene_mse_loss, list_gene_losses, gene_mse_factor = srez_model.create_generator_loss(disc_fake_output, gene_output, gene_output_list, train_features, train_labels, train_masks)
     disc_real_loss, disc_fake_loss = \
                      srez_model.create_discriminator_loss(disc_real_output, disc_fake_output)
