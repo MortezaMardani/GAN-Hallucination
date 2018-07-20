@@ -15,6 +15,7 @@ OUTPUT_TRAIN_SAMPLES = 0
 
 def compute_SNR(gt, recon):
     first_term =  np.linalg.norm(gt)
+    #print("Norm of Ground Truth is: %f" % first_term)
     second_term = np.linalg.norm((gt - recon))
     #result = 20 * np.log10(first_term/second_term)
     result = -20 * np.log10(second_term/first_term)
@@ -71,16 +72,52 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     # Add the batch dimension
     dim1, dim2, dim3 = image.shape
     
-    point1 = dim1 // 2
+    point1 = dim1 // 4
     point2 = dim2 // 2
     point3 = 3*(dim2 // 4)
 
-    recon_img = image[:point1,point2:point3,:]
-    real_img = image[:point1,point3:,:]
+    recon_img1 = image[:point1,point2:point3,:]
+    real_img1 = image[:point1,point3:,:]
 
-    SNR = compute_SNR(real_img, recon_img)
-    print("Calculated SNR is:")
-    print(SNR)
+    SNR1 = compute_SNR(real_img1, recon_img1)
+    print("Calculated SNR 1 is:")
+    print(SNR1)
+    print(real_img1.shape)
+    print(recon_img1.shape)
+
+    point_img2 = dim1 // 2
+
+    recon_img2 = image[point1:point_img2,point2:point3,:]
+    real_img2 = image[point1:point_img2,point3:,:]
+
+    SNR2 = compute_SNR(real_img2, recon_img2)
+    print("Calculated SNR 2 is:")
+    print(SNR2)
+
+    point_img3 = 3*(dim1 // 4)
+
+    recon_img3 = image[point_img2:point_img3,point2:point3,:]
+    real_img3 = image[point_img2:point_img3,point3:,:]
+
+    SNR3 = compute_SNR(real_img3, recon_img3)
+    print("Calculated SNR 3 is:")
+    print(SNR3)
+
+    recon_img4 = image[point_img3:,point2:point3,:]
+    real_img4 = image[point_img3:,point3:,:]
+
+    SNR4 = compute_SNR(real_img4, recon_img4)
+    print("Calculated SNR 4 is:")
+    print(SNR4)
+
+
+    temp = tf.reshape(image,[1,dim1,dim2,dim3])
+    filename = 'batch%06d_%s.png' % (batch, suffix)
+    summary_op = tf.summary.image(filename, temp)
+    summary_run = td.sess.run(summary_op)
+    sum_writer.add_summary(summary_run,1)
+
+
 
 
 
@@ -88,20 +125,25 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     #print(tf.trainable_variables())
     #var = [v for v in tf.trainable_variables() if v.name == "gene_layer/encoder_5_2/batchnorm/batchnorm/add_1:0"][0]
     latent = tf.get_default_graph().get_tensor_by_name('gene_layer/encoder_5_2/batchnorm/batchnorm/add_1:0')
-    print(latent)
+    #print(latent)
 
     ### LATENT SPACE HERE
     latent_space = td.sess.run(latent,feed_dict = feed_dict)
-    print(latent_space.shape)
-    print(type(latent_space))
+    # print(latent_space.shape)
+    # print(type(latent_space))
+    # print(np.linalg.norm(latent_space))
+    # print(latent_space)
+    # print(np.max(latent_space))
+    # print(np.min(latent_space))
 
     
     filename = 'latent_batch%06d_%s.out' % (batch, suffix)
     filename = os.path.join('latent_arrays',filename)
     np.save(filename,latent_space)
 
-    
+    ### Latent stuff (messes everything up)
 
+"""
     logs_path = 'tensorboard'
     with open(os.path.join(logs_path, "s-metadata.tsv"), 'w') as metadata_file:
         for row in range(2):
@@ -124,15 +166,9 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     saver = tf.train.Saver()
     saver.save(sess, os.path.join(logs_path, "model.ckpt"), 1)
 
-    print(real_img.shape)
-    print(recon_img.shape)
+    """
 
-    temp = tf.reshape(image,[1,dim1,dim2,dim3])
-
-    filename = 'batch%06d_%s.png' % (batch, suffix)
-    summary_op = tf.summary.image(filename, temp) 
-    summary_run = td.sess.run(summary_op) 
-    sum_writer.add_summary(summary_run,1)
+    
 
 
 
@@ -246,7 +282,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
         #first train based on MSE and then GAN
         if batch < 1e4:
-           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1.0}
+           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1.0,td.train_phase: True}
         else:
            feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1.0}  #1/np.sqrt(batch+100-1e3) + 0.9}
         #feed_dict = {td.learning_rate : lrval}

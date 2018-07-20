@@ -51,6 +51,7 @@ def generate_mask_mat(mask=[], mute=0):
     # shift
     mask = np.fft.ifftshift(mask)
     # compute reduction
+    #mask = np.ones(mask.shape)
     r_factor = len(mask.flatten())/sum(mask.flatten())
     if not mute:
         print('load mask size of {1} for R-factor={0:.4f}'.format(r_factor, mask.shape))

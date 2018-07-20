@@ -669,27 +669,29 @@ def Fourier(x, separate_complex=True):
 
 
 def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channels = 2, layer_output_skip=5):
-    print('use encoder decoder model')
+    print('use Encoder decoder model')
     # old variables
     layers = []    
     old_vars = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
     # layers.append(features)
 
     # definition
-    num_filter_generator = 8
+    num_filter_generator = 4
     layer_specs = [ 
-        num_filter_generator * 2, # encoder_2: [batch, 128, 128, ngf] => [batch, 64, 64, ngf * 2]
-        num_filter_generator * 4, # encoder_3: [batch, 64, 64, ngf * 2] => [batch, 32, 32, ngf * 4]
-        num_filter_generator * 8, # encoder_4: [batch, 32, 32, ngf * 4] => [batch, 16, 16, ngf * 8]
+         num_filter_generator * 2,
+         num_filter_generator * 4, # encoder_2: [batch, 128, 128, ngf] => [batch, 64, 64, ngf * 2]
+         num_filter_generator * 8, # encoder_3: [batch, 64, 64, ngf * 2] => [batch, 32, 32, ngf * 4]
+         num_filter_generator * 16, # encoder_4: [batch, 32, 32, ngf * 4] => [batch, 16, 16, ngf * 8]
         # num_filter_generator * 8, # encoder_5: [batch, 16, 16, ngf * 8] => [batch, 8, 8, ngf * 8]
         # num_filter_generator * 8, # encoder_6: [batch, 8, 8, ngf * 8] => [batch, 4, 4, ngf * 8]
         # num_filter_generator * 8, # encoder_7: [batch, 4, 4, ngf * 8] => [batch, 2, 2, ngf * 8]
-        num_filter_generator * 16, # encoder_8: [batch, 2, 2, ngf * 8] => [batch, 1, 1, ngf * 8]
+       # num_filter_generator * 16, # encoder_8: [batch, 2, 2, ngf * 8] => [batch, 1, 1, ngf * 8]
     ]
 
    # encoder_1: [batch, 256, 256, in_channels] => [batch, 128, 128, ngf]
     with tf.variable_scope("encoder_1"):
-        output = conv(features, num_filter_generator, stride=2)
+        output = conv(features, num_filter_generator, stride=2 )
+       # output = tf.identity(features)
         layers.append(output)
 
     for out_channels in layer_specs:
@@ -714,24 +716,28 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
 
     ###
     #train_phase = tf.placeholder_with_default(True, shape=())
-    noise = np.random.normal(0,1,layers[-1].shape) 
-    def f1(): return tf.identity(layers[-1])
-    def f2(): return tf.add(layers[-1], noise)
+    with tf.variable_scope("latent"):
+        noise = np.random.normal(0,1.5,layers[-1].shape) 
+        def f1(): return tf.identity(layers[-1])
+        def f2(): return tf.add(layers[-1], noise)
+        #def f2(): return tf.identity(layers[-1])
+        #def f2(): return tf.zeros(layers[-1].shape)
     
-    layers[-1] = tf.cond(train_phase, f1, f2)
+        layers[-1] = tf.cond(train_phase, f1, f2)
 
 
 
 
 
     layer_specs = [
-        # (num_filter_generator * 16, 0.5),   # decoder_8: [batch, 1, 1, ngf * 8] => [batch, 2, 2, ngf * 8 * 2]
+      #   (num_filter_generator * 16, 0.5),   # decoder_8: [batch, 1, 1, ngf * 8] => [batch, 2, 2, ngf * 8 * 2]
         # (num_filter_generator * 8, 0.5),   # decoder_7: [batch, 2, 2, ngf * 8 * 2] => [batch, 4, 4, ngf * 8 * 2]
         # (num_filter_generator * 8, 0.5),   # decoder_6: [batch, 4, 4, ngf * 8 * 2] => [batch, 8, 8, ngf * 8 * 2]
-        (num_filter_generator * 8, 0.0),   # decoder_5: [batch, 8, 8, ngf * 8 * 2] => [batch, 16, 16, ngf * 8 * 2]
-        (num_filter_generator * 4, 0.0),   # decoder_4: [batch, 16, 16, ngf * 8 * 2] => [batch, 32, 32, ngf * 4 * 2]
-        (num_filter_generator * 2, 0.0),   # decoder_3: [batch, 32, 32, ngf * 4 * 2] => [batch, 64, 64, ngf * 2 * 2]
-        (num_filter_generator, 0.0),       # decoder_2: [batch, 64, 64, ngf * 2 * 2] => [batch, 128, 128, ngf * 2]
+       # (num_filter_generator * 8, 0.0),   # decoder_5: [batch, 8, 8, ngf * 8 * 2] => [batch, 16, 16, ngf * 8 * 2]
+         (num_filter_generator * 8, 0.5),   # decoder_4: [batch, 16, 16, ngf * 8 * 2] => [batch, 32, 32, ngf * 4 * 2]
+         (num_filter_generator * 4, 0.5),   # decoder_3: [batch, 32, 32, ngf * 4 * 2] => [batch, 64, 64, ngf * 2 * 2]
+         (num_filter_generator * 2, 0.5),
+         (num_filter_generator, 0.0),       # decoder_2: [batch, 64, 64, ngf * 2 * 2] => [batch, 128, 128, ngf * 2]
     ]
 
     num_encoder_layers = len(layers)
@@ -743,8 +749,9 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
                 # since it is directly connected to the skip_layer
                 input = layers[-1]
             else:
-                input = tf.concat(axis=3, values=[layers[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
-
+                #input = tf.concat(axis=3, values=[layers[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
+                input = tf.add(layers[-1],layers[skip_layer])
+                #input = layers[-1]
             rectified  = tf.nn.relu(input)
             # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
             output = deconv(rectified, out_channels)
@@ -760,28 +767,27 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
 
 
     with tf.variable_scope("decoder_1"):
-        input = tf.concat(axis=3, values=[layers[-1], layers[0]]) #, axis=3)
+        #input = tf.concat(axis=3, values=[layers[-1], layers[0]]) #, axis=3)
+        input = tf.add(layers[-1],layers[0])
+        #input = layers[-1]
        #rectified = tf.nn.relu(input)
         #output = deconv(rectified, channels)
         output = deconv(input,channels)
         #output = tf.nn.sigmoid(output)
+        #output = tf.identity(layers[-1])
         layers.append(output)
+    
 
     for x in layers:
         print(x)
 
     #hard data consistency
-
-    
+    """
     masks_comp = 1.0 - masks
     correct_kspace = downsample(labels, masks) + downsample(layers[-1], masks_comp)
     correct_image = upsample(correct_kspace, masks)
     layers.append(correct_image)
-    #layers[-1] = layers[-1] * correct_image
-    #print("Dimensions")
-    #print(correct_image.shape)
-    #model.add_layer(correct_image)
-
+"""
 
     # out variables
     new_vars  = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
@@ -875,7 +881,10 @@ def _generator_model_with_pool(sess, features, labels, channels, layer_output_sk
 
 """
 
-'''
+
+
+### Resnet Architecture
+
 def _generator_model_with_scale(sess, features, labels, masks, channels, layer_output_skip=5,
                                 num_dc_layers=0):
     
@@ -925,14 +934,16 @@ def _generator_model_with_scale(sess, features, labels, masks, channels, layer_o
 
     
     #hard data consistency
+    """
     masks_comp = 1.0 - masks
     correct_kspace = downsample(labels, masks) + downsample(output, masks_comp)
     correct_image = upsample(correct_kspace, masks)
     model.add_layer(correct_image)
-    
+    """
     
     
     #inexact data consistency. can be repeated using a for loop
+    """
     output_neg = -1*output
     model.add_layer(output_neg)
     model.add_sum(labels)
@@ -940,7 +951,7 @@ def _generator_model_with_scale(sess, features, labels, masks, channels, layer_o
     model.add_upsample(masks)
     model.add_scale(stddev_factor=1.)
     model.add_sum(output)
-       
+       """
 
     ##inexact affine projection
     #ww = 0.01
@@ -954,255 +965,14 @@ def _generator_model_with_scale(sess, features, labels, masks, channels, layer_o
     gene_vars = list(set(new_vars) - set(old_vars))
 
     # select subset of layers
-    output_layers = model.outputs[0] # [model.outputs[0]] + model.outputs[1:-1][::layer_output_skip] + [model.outputs[-1]]
+    output_layers = model.outputs[0] 
+    #output_layers = [model.outputs[0]] + model.outputs[1:-1][::layer_output_skip] + [model.outputs[-1]]
 
     return model.get_output(), gene_vars, output_layers
 
-'''
-'''
-def _generator_model_with_scale_modf(sess, features, labels, masks, channels, layer_output_skip=5,
-                                num_dc_layers=0):
-
-    channels = 3
-    #image_size = tf.shape(features)
-    mapsize = 3
-    res_units  = [128] #[64, 32, 16]#[256, 128, 96]
-    scale_changes = [0,0]
-    print('use resnet without pooling:', res_units)
-    old_vars = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
-
-    # See Arxiv 1603.05027
-    model = Model('GEN', features)
-
-    #bypass connection
-    bypass = model.get_output()
-
-    # loop different levels
-    for ru in range(len(res_units)):
-        nunits  = res_units[ru]
-
-        for j in range(1):  #(2)
-            model.add_residual_block(nunits, mapsize=mapsize)
-
-        # Spatial upscale (see http://distill.pub/2016/deconv-checkerboard/)
-        # and transposed convolution
-        if scale_changes[ru]>0:
-            model.add_upscale()
-
-        #model.add_batch_norm()
-        #model.add_relu()
-        #model.add_conv2d_transpose(nunits, mapsize=mapsize, stride=1, stddev_factor=1.)
 
 
-    ## Finalization a la "all convolutional net"
-    #nunits = res_units[-1]
-    #model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    ## Worse: model.add_batch_norm()
-    #model.add_relu()
 
-    #model.add_conv2d(nunits, mapsize=1, stride=1, stddev_factor=2.)
-    ## Worse: model.add_batch_norm()
-    #model.add_relu()
-
-    # Last layer is sigmoid with no batch normalization
-    model.add_conv2d(channels, mapsize=1, stride=1, stddev_factor=1.)
-    model.add_sum(bypass)  #new:bypass connection
-    model.add_sigmoid()
-
-    output_bdc = model.outputs[-1]   #output brfore dc 
-    output_1 = output_bdc
-    print('size', output_bdc.get_shape())
-    
-    
-    
-    # data consistency, a gradient step
-    K=4
-    output = 0*output_1 + upsample(downsample(labels-output_1, K), K)
-    #print('size_up', output.get_shape())
-    model.add_layer(output)
-    model.add_conv2d(channels, mapsize=1, stride=1, stddev_factor=1.)
-    #model.add_scale(channels, mapsize=1, stride=1, stddev_factor=1.)
-    model.add_sum(output_1)
-    output_brelu = model.outputs[-1]
-    model.add_relu()
-    output_relu = model.outputs[-1]
-
-
-    new_vars  = tf.global_variables()    #tf.all_variables() , all_variables() are deprecated
-    gene_vars = list(set(new_vars) - set(old_vars))
-
-    # select subset of layers
-    output_layers = [model.outputs[0]] + [output_bdc] + [output_brelu] + [output_relu]          #  model.outputs[0]] + model.outputs[1:-1][::layer_output_skip] + [model.outputs[-1]]
-
-    return model.get_output(), gene_vars, output_layers
-'''
-
-
-'''
-def _generator_model_singlelayer_cnn(sess, features, labels, masks, channels, layer_output_skip=5,
-                                num_dc_layers=0):
-
-    channels = 3
-    #image_size = tf.shape(features)
-    mapsize = 8
-    res_units  = [3] #[64, 32, 16]#[256, 128, 96]
-    scale_changes = [0,0]
-    print('use resnet without pooling:', res_units)
-    old_vars = tf.global_variables()    #tf.all_variables() , all_variables() are deprecated
-
-    model = Model('GEN', features)
-
-    #CNN with a single layer
-    nunits = res_units[-1]
-    model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.) #no bias!!!??
-    model.add_batch_norm()
-
-
-    ##two more conv layers
-    #model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    #model.add_batch_norm()
-    #model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    #model.add_batch_norm()
-
-
-    output_brelu = model.outputs[-1]
-    model.add_relu()
-    output_relu = model.outputs[-1]
-    print('shape_output_relu', output_relu.get_shape())
-
-
-    # data consistency, a gradient step
-    K=1
-    output = 0*output_relu + upsample(downsample(labels-output_relu, K), K)
-
-    model.add_layer(output)
-    #model.add_conv2d(channels, mapsize=1, stride=1, stddev_factor=1.)
-    model.add_scale(stddev_factor=1.)
-
-    model.add_sum(output_relu)
-
-    output_dc = model.outputs[-1]
-
-
-    new_vars  = tf.global_variables()    #tf.all_variables() , all_variables() are deprecated
-    gene_vars = list(set(new_vars) - set(old_vars))
-
-    # select subset of layers
-    output_layers = [model.outputs[0]] + [output_brelu] + [output_relu] +  [output_dc]      #  model.outputs[0]] + model.outputs[1:-1][::layer_output_skip] + [model.outputs[-1]]
-
-    return model.get_output(), gene_vars, output_layers
-'''
-
-
-'''
-def _generator_model_singlelayer_cnn(sess, features, labels, masks, channels, layer_output_skip=5,
-                                num_dc_layers=0):
-
-    channels = 2
-    #image_size = tf.shape(features)
-    mapsize = 3
-    #nunits  = 2
-    old_vars = tf.global_variables()
-
-    model = Model('GEN', features)
-
-    #state variable; 
-
-    #approximate data consistency
-    labels_hat = 0*features + upsample(downsample(labels-features, masks), masks)
-    print('labels_hat', labels_hat.get_shape())
-    print('features', features.get_shape())
-    model.add_layer(labels_hat)
-    model.add_scale(stddev_factor=1.)
-    model.add_sum(features)
-    state_var = model.outputs[-1]
-    
-    
-
-    ##hard data consistency
-    #masks_comp = 1 - masks
-    #correct_kspace = downsample(labels, masks) + downsample(features, masks_comp)
-    #correct_image = upsample(correct_kspace, masks)
-    #model.add_layer(correct_image)
-    #xxx = 0*features
-    #model.add_sum(xxx)
-    #xx = model.outputs[-1]
-    #print('xx_shape', xx.get_shape())
-    
-
-
-    ##CNN with a single layer
-    #model.add_conv2d(16, mapsize=mapsize, stride=1, stddev_factor=2.)
-    #model.add_batch_norm()   #???
-    #model.add_conv2d(16, mapsize=mapsize, stride=1, stddev_factor=2.)
-    #model.add_batch_norm()   #???
-    #model.add_conv2d(2, mapsize=mapsize, stride=1, stddev_factor=2.)
-    ##model.add_batch_norm()   #???
-    ##model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    ##model.add_batch_norm()   #???
-    ##model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    ##model.add_batch_norm()   #???
-    ##model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    #output_brelu = model.outputs[-1]
-    ##ReLU activation
-    #model.add_relu()
-    #output_relu = model.outputs[-1]
-    #output_layers = [features] + [state_var] + [output_brelu] + [output_relu]
-    
-
-    #CNN with a single layer - modified and skip connection
-    num_units = 64
-    bypass = model.outputs[-1]
-    model.add_conv2d(num_units, mapsize=mapsize, stride=1, stddev_factor=2.)
-    model.add_batch_norm()
-    output_brelu_layer_1 = model.outputs[-1]
-    model.add_relu()
-    output_layer_1 = model.outputs[-1]
-    zz = tf.cast(tf.zeros(tf.shape(output_layer_1), tf.int32), tf.float32)
-    print('shape_zz', zz.get_shape())
-    mask_1 = tf.cast(tf.greater(output_layer_1, zz), tf.float32)
-    model.add_conv2d(2, mapsize=mapsize, stride=1, stddev_factor=2.)
-    model.add_sum(bypass)
-    output_last = model.outputs[-1]
-    #gene_masks = [mask_1]
-    output_layers = [features] + [output_brelu_layer_1] + [output_layer_1] + [mask_1] + [output_last]
-    
-
-    
-    #CNN with two layers
-    model.add_conv2d(16, mapsize=mapsize, stride=1, stddev_factor=2.)
-    model.add_batch_norm()
-    output_brelu_layer_1 = model.outputs[-1]
-    model.add_relu()
-    output_layer_1 = model.outputs[-1]
-    mask_1 = tf.cast(tf.greater(output_layer_1, zeros), tf.float32)
-    model.add_conv2d(16, mapsize=mapsize, stride=1, stddev_factor=2.)
-    model.add_batch_norm()
-    output_brelu_layer_2 = model.outputs[-1]
-    model.add_relu()
-    output_layer_2 = model.outputs[-1]
-    mask_2 = tf.cast(tf.greater(output_layer_2, zeros), tf.float32)
-    model.add_conv2d(2, mapsize=mapsize, stride=1, stddev_factor=2.)
-    output_last = model.outputs[-1]
-    #gene_masks = [mask_1] + [mask_2]
-    output_layers = [features] + [output_brelu_layer_1] + [output_layer_1] + [mask_1] + [output_brelu_layer_2] + [output_layer_2] + [mask_2] + [output_last]
-    
-    
-    #fully connected (dense) layer
-    shape_input = tf.shape(state_var)
-    vec_input = tf.reshape(state_var, [shape_input[0],-1])
-    model.add_layer(vec_input)
-    model.add_dense(nunits, stddev_factor=1.0)
-    vec_output = model.outputs[-1]
-    output = tf.reshape(vec_output, shape_input)
-    model.add_layer(output)
-    
-
-    new_vars  = tf.global_variables() 
-    gene_vars = list(set(new_vars) - set(old_vars))
-
-    return model.get_output(), gene_vars, output_layers
-'''
 
 
 def create_model(sess, features, labels, masks, architecture='resnet'):

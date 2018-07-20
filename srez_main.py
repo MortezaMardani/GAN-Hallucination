@@ -84,7 +84,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # Configuration (alphabetically)
 
-tf.app.flags.DEFINE_integer('num_iteration', 1,
+tf.app.flags.DEFINE_integer('num_iteration', 2,
                             "Number of repeatitions for the generator network.")
 
 tf.app.flags.DEFINE_integer('batch_size', 16,
@@ -126,7 +126,7 @@ tf.app.flags.DEFINE_float('gene_log_factor', 0.0,
 tf.app.flags.DEFINE_float('gene_ls_factor', 1.0,
                           "Multiplier for generator fool loss term, weighting log-loss vs LS loss")
 
-tf.app.flags.DEFINE_float('gene_dc_factor', 0.1,
+tf.app.flags.DEFINE_float('gene_dc_factor', 0.0,
                           "Multiplier for generator data-consistency L2 loss term for data consistency, weighting Data-Consistency with GD-loss for GAN-loss")
 
 tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
@@ -135,7 +135,7 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
 tf.app.flags.DEFINE_float('learning_beta1', 0.9,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.001,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.000015,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 50000,
@@ -150,7 +150,7 @@ tf.app.flags.DEFINE_integer('sample_size', 128,
 tf.app.flags.DEFINE_integer('sample_size_y', -1,
                             "Image sample size in pixels. by default the sample as sample_size")
 
-tf.app.flags.DEFINE_integer('summary_period', 500,
+tf.app.flags.DEFINE_integer('summary_period', 5000,
                             "Number of batches between summary data dumps")
 
 tf.app.flags.DEFINE_integer('summary_train_period', 50,
@@ -174,10 +174,10 @@ tf.app.flags.DEFINE_integer('sample_test', -1,
 tf.app.flags.DEFINE_integer('sample_train', -1,
                             "Number of features to use for train. default value is -1 for use all samples except testing samples")
 
-tf.app.flags.DEFINE_integer('subsample_test', 8,
+tf.app.flags.DEFINE_integer('subsample_test', -1,
                             "Number of test sample to uniform sample. default value is -1 for using all test samples")
 
-tf.app.flags.DEFINE_integer('subsample_train', 1000,
+tf.app.flags.DEFINE_integer('subsample_train', -1,
                             "Number of train sample to uniform sample. default value is -1 for using all train samples")
                             
 tf.app.flags.DEFINE_string('train_dir', 'train',
@@ -212,9 +212,6 @@ tf.app.flags.DEFINE_integer('hybrid_disc', 0,
 
 tf.app.flags.DEFINE_string('architecture','resnet',
                             "model arch used for generator, ex: resnet, aec, pool")
-global real_img
-global recon_img
-global latent_space
 
 real_img = 0
 
@@ -424,6 +421,8 @@ def _train():
     # randomly sub-sample for test    
     if FLAGS.subsample_test > 0:
         index_sample_test_selected = random.sample(range(len(test_filenames_input)), FLAGS.subsample_test)
+        print(len(test_filenames_input))
+        print(FLAGS.subsample_test)
         if not FLAGS.permutation_test:
             index_sample_test_selected = sorted(index_sample_test_selected)
         test_filenames_input = [test_filenames_input[x] for x in index_sample_test_selected]
@@ -440,6 +439,11 @@ def _train():
         mask = content_mask[key_mask[0]]
     except:
         mask = None
+
+    print(len(train_filenames_input))
+    print(len(train_filenames_output))
+    print(len(test_filenames_input))
+    print(len(test_filenames_output))
 
     # Setup async input queues
     train_features, train_labels, train_masks = srez_input.setup_inputs_one_sources(sess, train_filenames_input, train_filenames_output, 
@@ -484,7 +488,7 @@ def _train():
      disc_real_output, disc_fake_output, disc_var_list, train_phase,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
 
-    train_phase = tf.placeholder(tf.bool, [])
+    #train_phase = tf.placeholder(tf.bool, [])
     
     gene_loss, gene_dc_loss, gene_ls_loss, gene_mse_loss, list_gene_losses, gene_mse_factor = srez_model.create_generator_loss(disc_fake_output, gene_output, gene_output_list, train_features, train_labels, train_masks)
     disc_real_loss, disc_fake_loss = \
