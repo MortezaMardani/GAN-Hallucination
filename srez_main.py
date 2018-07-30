@@ -135,7 +135,7 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
 tf.app.flags.DEFINE_float('learning_beta1', 0.9,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.000015,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.00015,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 50000,
@@ -274,7 +274,7 @@ def get_filenames(dir_file='', shuffle_filename=False):
 
 
 
-def setup_tensorflow(gpu_memory_fraction=1.0):
+def setup_tensorflow(gpu_memory_fraction=0.3):
     # Create session
     config = tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)
     if FLAGS.gpu_memory_fraction>0:
@@ -509,7 +509,7 @@ def _train():
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
     
-    """
+    
     if tf.gfile.Exists(metafile):
         saver = tf.train.Saver()
         print("Loading checkpoint from file `%s'" % (filename,))
@@ -517,9 +517,11 @@ def _train():
     else:
         print("No checkpoint `%s', train from scratch" % (filename,))
         sess.run(tf.global_variables_initializer())
-"""
-    print("No checkpoint `%s', train from scratch" % (filename,))
-    sess.run(tf.global_variables_initializer())
+
+   
+
+    #print("No checkpoint `%s', train from scratch" % (filename,))
+    #sess.run(tf.global_variables_initializer())
 
 
     # Train model

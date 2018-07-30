@@ -26,6 +26,7 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     td = train_data
 
     size = [label.shape[1], label.shape[2]]
+    print(size)
 
     # complex input zpad into r and channel
     complex_zpad = tf.image.resize_nearest_neighbor(feature, size)
@@ -44,6 +45,9 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     #print('size_mag_output', mag)
     mag_output = tf.concat(axis=3, values=[mag_output, mag_output])
 
+
+
+
     label_complex = tf.complex(label[:,:,:,0], label[:,:,:,1])
     label_mag = tf.abs(label_complex)
     label_mag = tf.reshape(label_mag, [FLAGS.batch_size, size[0], size[1], 1])
@@ -55,6 +59,12 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     image = tf.concat(axis=0, values=[image[i,:,:,:] for i in range(int(FLAGS.batch_size))])
     image = td.sess.run(image)
     print('save to image size {0} type {1}', image.shape, type(image))
+
+    # save magnitude of output images
+    filename = 'magnitude_batch%06d_%s.out' % (batch, suffix)
+    filename = os.path.join('mags',filename)
+    np.save(filename,image)
+
     
     # 3rd channel for visualization
     mag_3rd = np.maximum(image[:,:,0],image[:,:,1])
@@ -370,6 +380,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
                 #if index_batch_test>0:
                     #gene_param['gene_layers']=[]
                 print("at summarizing stage")
+                feed_dict = {td.gene_minput: test_feature, td.label_minput: test_label,td.train_phase: True}
                 _summarize_progress(sess,feed_dict,sum_writer,td, test_feature, test_label, gene_output, gene_output_list, eta, nmse, kappa, batch,  
                                     'test{0}'.format(index_batch_test),                                     
                                     max_samples = FLAGS.batch_size,
@@ -383,7 +394,6 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         # export train batches
         if OUTPUT_TRAIN_SAMPLES and (batch % FLAGS.summary_train_period == 0):
             # get train data
-            feed_dict['train_phase'] = True
             ops = [td.gene_minimize, td.disc_minimize, td.gene_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, 
                    td.train_features, td.train_labels, td.gene_output]#, td.gene_var_list, td.gene_layers]
             _, _, gene_loss, gene_dc_loss, gene_ls_loss, disc_real_loss, disc_fake_loss, train_feature, train_label, train_output, mask = td.sess.run(ops, feed_dict=feed_dict)

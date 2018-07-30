@@ -676,12 +676,12 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
     # layers.append(features)
 
     # definition
-    num_filter_generator = 4
+    num_filter_generator = 3
     layer_specs = [ 
          num_filter_generator * 2,
-         num_filter_generator * 4, # encoder_2: [batch, 128, 128, ngf] => [batch, 64, 64, ngf * 2]
-         num_filter_generator * 8, # encoder_3: [batch, 64, 64, ngf * 2] => [batch, 32, 32, ngf * 4]
-         num_filter_generator * 16, # encoder_4: [batch, 32, 32, ngf * 4] => [batch, 16, 16, ngf * 8]
+         num_filter_generator * 3, # encoder_2: [batch, 128, 128, ngf] => [batch, 64, 64, ngf * 2]
+         num_filter_generator * 3, # encoder_3: [batch, 64, 64, ngf * 2] => [batch, 32, 32, ngf * 4]
+         num_filter_generator * 4, # encoder_4: [batch, 32, 32, ngf * 4] => [batch, 16, 16, ngf * 8]
         # num_filter_generator * 8, # encoder_5: [batch, 16, 16, ngf * 8] => [batch, 8, 8, ngf * 8]
         # num_filter_generator * 8, # encoder_6: [batch, 8, 8, ngf * 8] => [batch, 4, 4, ngf * 8]
         # num_filter_generator * 8, # encoder_7: [batch, 4, 4, ngf * 8] => [batch, 2, 2, ngf * 8]
@@ -710,23 +710,53 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
     #print(latent_code.shape)
 
 
-
-
-
-
     ###
     #train_phase = tf.placeholder_with_default(True, shape=())
+
+
+   #b.eval(session = sess)
+    #b = sess.run(encoder_4)
+    #with sess:
+    #    temp = tf.Variable(layers[-1],name = "temp")
+    #    b = layers[-1].eval()
+    #init = tf.variables_initializer([temp])
+    #sess.run(temp)
+   # with tf.Session() as sess:
+    #    temp = temp.eval(session = sess)
+   # temp_reshape = tf.reshape(temp,[4,-1])
+   # inds = tf.argmax(temp_reshape,axis = 1)
+   # val = inds[0:1]
+    #val = tf.Variable(inds[0:1],name = "val")
+    #init = tf.variables_initializer([val])
+    #sess.run(init)
+    #print(val)
+
+
     with tf.variable_scope("latent"):
-        noise = np.random.normal(0,1.5,layers[-1].shape) 
+
+
+
+        noise = np.random.normal(0,0.5,layers[-1].shape) 
+        #noise = np.random.normal(0,0.5)
+
         def f1(): return tf.identity(layers[-1])
-        def f2(): return tf.add(layers[-1], noise)
         #def f2(): return tf.identity(layers[-1])
+        #def f2(): return tf.add(layers[-1], noise)
         #def f2(): return tf.zeros(layers[-1].shape)
-    
+
+        def f2():
+            #return tf.identity(layers[-1])
+            temp = layers[-1]
+            #temp = tf.zeros(layers[-1].shape)
+            indices = [[0,0,6,4],[0, 0,6,5],[0,6,5,9],[0,6,7,2],[1,0,6,4],[1, 0,6,5],[1,6,5,9],[1,6,7,2]]  # A list of coordinates to update.
+
+            values = [6.3,7.5,6.8,-6.1,6.3,7.5,6.8,-6.1]  # A list of values corresponding to the respective
+            shape = temp.shape  # The shape of the corresponding dense tensor, same as `c`.
+            delta = tf.SparseTensor(indices, values, shape)
+            result = temp + tf.sparse_tensor_to_dense(delta)
+            return tf.zeros(layers[-1].shape)
+
         layers[-1] = tf.cond(train_phase, f1, f2)
-
-
-
 
 
     layer_specs = [
@@ -734,8 +764,8 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
         # (num_filter_generator * 8, 0.5),   # decoder_7: [batch, 2, 2, ngf * 8 * 2] => [batch, 4, 4, ngf * 8 * 2]
         # (num_filter_generator * 8, 0.5),   # decoder_6: [batch, 4, 4, ngf * 8 * 2] => [batch, 8, 8, ngf * 8 * 2]
        # (num_filter_generator * 8, 0.0),   # decoder_5: [batch, 8, 8, ngf * 8 * 2] => [batch, 16, 16, ngf * 8 * 2]
-         (num_filter_generator * 8, 0.5),   # decoder_4: [batch, 16, 16, ngf * 8 * 2] => [batch, 32, 32, ngf * 4 * 2]
-         (num_filter_generator * 4, 0.5),   # decoder_3: [batch, 32, 32, ngf * 4 * 2] => [batch, 64, 64, ngf * 2 * 2]
+         (num_filter_generator * 3, 0.5),   # decoder_4: [batch, 16, 16, ngf * 8 * 2] => [batch, 32, 32, ngf * 4 * 2]
+         (num_filter_generator * 3, 0.5),   # decoder_3: [batch, 32, 32, ngf * 4 * 2] => [batch, 64, 64, ngf * 2 * 2]
          (num_filter_generator * 2, 0.5),
          (num_filter_generator, 0.0),       # decoder_2: [batch, 64, 64, ngf * 2 * 2] => [batch, 128, 128, ngf * 2]
     ]
@@ -750,8 +780,8 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
                 input = layers[-1]
             else:
                 #input = tf.concat(axis=3, values=[layers[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
-                input = tf.add(layers[-1],layers[skip_layer])
-                #input = layers[-1]
+                #input = tf.add(layers[-1],layers[skip_layer])
+                input = layers[-1]
             rectified  = tf.nn.relu(input)
             # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
             output = deconv(rectified, out_channels)
@@ -768,38 +798,63 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
 
     with tf.variable_scope("decoder_1"):
         #input = tf.concat(axis=3, values=[layers[-1], layers[0]]) #, axis=3)
-        input = tf.add(layers[-1],layers[0])
-        #input = layers[-1]
+        #input = tf.add(layers[-1],layers[0])
+        input = layers[-1]
        #rectified = tf.nn.relu(input)
         #output = deconv(rectified, channels)
         output = deconv(input,channels)
         #output = tf.nn.sigmoid(output)
         #output = tf.identity(layers[-1])
         layers.append(output)
-    
 
     for x in layers:
         print(x)
 
+    layers.append(layers[-1])
+
+    def l1(): 
+        return tf.identity(layers[-1])
+        masks_comp = 1.0 - masks
+        correct_kspace = downsample(labels, masks) + downsample(layers[-2], masks_comp)
+        correct_image = upsample(correct_kspace, masks)
+        return correct_image
+    def l2():
+        print("testing with data consistency for noise correction")
+        masks_comp = 1.0 - masks
+        correct_kspace = downsample(labels, masks) + downsample(layers[-2], masks_comp)
+        correct_image = upsample(correct_kspace, masks)
+        return correct_image
+
+    layers[-1] = tf.cond(train_phase,l1,l2)
+
+    # out variables
+    # select subset of layers
+    new_vars  = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
+    gene_vars = list(set(new_vars) - set(old_vars))
+    output_layers = [layers[0]] + layers[1:-1][::layer_output_skip] + [layers[-1]]
+
+    return layers[-1], gene_vars, output_layers
+
+
+
+
+
+
+
     #hard data consistency
-    """
+"""
     masks_comp = 1.0 - masks
     correct_kspace = downsample(labels, masks) + downsample(layers[-1], masks_comp)
     correct_image = upsample(correct_kspace, masks)
     layers.append(correct_image)
 """
 
-    # out variables
-    new_vars  = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
-    gene_vars = list(set(new_vars) - set(old_vars))
 
-    # select subset of layers
-    output_layers = [layers[0]] + layers[1:-1][::layer_output_skip] + [layers[-1]]
+
 
     #adversarial_gradients = gradients_out_in(layers[-1],features)
 
 
-    return layers[-1], gene_vars, output_layers
 
 
 
