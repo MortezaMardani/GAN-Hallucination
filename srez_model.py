@@ -745,16 +745,34 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
         #def f2(): return tf.zeros(layers[-1].shape)
 
         def f2():
-            #return tf.identity(layers[-1])
+            return tf.identity(layers[-1])
             temp = layers[-1]
-            #temp = tf.zeros(layers[-1].shape)
-            indices = [[0,0,6,4],[0, 0,6,5],[0,6,5,9],[0,6,7,2],[1,0,6,4],[1, 0,6,5],[1,6,5,9],[1,6,7,2]]  # A list of coordinates to update.
+            original_dims = tf.shape(temp)
+            temp_vector = tf.reshape(temp,[1,-1])
+            temp_abs_vector = tf.abs(temp_vector)
 
-            values = [6.3,7.5,6.8,-6.1,6.3,7.5,6.8,-6.1]  # A list of values corresponding to the respective
-            shape = temp.shape  # The shape of the corresponding dense tensor, same as `c`.
-            delta = tf.SparseTensor(indices, values, shape)
-            result = temp + tf.sparse_tensor_to_dense(delta)
-            return tf.zeros(layers[-1].shape)
+            k = 2
+
+            
+            values, indices = tf.nn.top_k(temp_abs_vector,k)
+            
+            my_range = tf.expand_dims(tf.range(0, tf.shape(indices)[0]), 1)
+            my_range_repeated = tf.tile(my_range, [1, k])
+
+            full_indices = tf.concat([tf.expand_dims(my_range_repeated, 2), tf.expand_dims(indices, 2)], axis=2)
+            full_indices = tf.reshape(full_indices, [-1, 2])
+            full_indices = tf.cast(full_indices,tf.int64)
+
+
+            vals = tf.gather_nd(temp_vector,full_indices)
+            vals = tf.reshape(vals,[-1])
+
+            delta = tf.SparseTensor(full_indices,vals,temp_vector.shape)
+
+            result = tf.sparse_tensor_to_dense(delta,validate_indices = False)
+            result = tf.reshape(result,original_dims)
+
+            return result
 
         layers[-1] = tf.cond(train_phase, f1, f2)
 
