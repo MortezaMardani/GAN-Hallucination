@@ -745,13 +745,12 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
         #def f2(): return tf.zeros(layers[-1].shape)
 
         def f2():
-            return tf.identity(layers[-1])
             temp = layers[-1]
             original_dims = tf.shape(temp)
             temp_vector = tf.reshape(temp,[1,-1])
             temp_abs_vector = tf.abs(temp_vector)
 
-            k = 2
+            k = 960
 
             
             values, indices = tf.nn.top_k(temp_abs_vector,k)
@@ -798,8 +797,8 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
                 input = layers[-1]
             else:
                 #input = tf.concat(axis=3, values=[layers[-1], layers[skip_layer]]) # change the order of value and axisn, axis=3)
-                #input = tf.add(layers[-1],layers[skip_layer])
-                input = layers[-1]
+                input = tf.add(layers[-1],layers[skip_layer])
+                #input = layers[-1]
             rectified  = tf.nn.relu(input)
             # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
             output = deconv(rectified, out_channels)
@@ -816,8 +815,8 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
 
     with tf.variable_scope("decoder_1"):
         #input = tf.concat(axis=3, values=[layers[-1], layers[0]]) #, axis=3)
-        #input = tf.add(layers[-1],layers[0])
-        input = layers[-1]
+        input = tf.add(layers[-1],layers[0])
+        #input = layers[-1]
        #rectified = tf.nn.relu(input)
         #output = deconv(rectified, channels)
         output = deconv(input,channels)
@@ -837,6 +836,7 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
         correct_image = upsample(correct_kspace, masks)
         return correct_image
     def l2():
+        return tf.identity(layers[-1])
         print("testing with data consistency for noise correction")
         masks_comp = 1.0 - masks
         correct_kspace = downsample(labels, masks) + downsample(layers[-2], masks_comp)

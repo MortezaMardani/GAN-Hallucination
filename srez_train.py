@@ -86,6 +86,15 @@ def _summarize_progress(sess,feed_dict, sum_writer,train_data, feature, label, g
     point2 = dim2 // 2
     point3 = 3*(dim2 // 4)
 
+    recon_img = image[:,point2:point3,:]
+    real_img = image[:,point3:,:]
+    SNR_batch_1 = compute_SNR(real_img,recon_img)
+    print("Calculated SNR is:")
+    print(SNR_batch_1)
+
+
+
+
     recon_img1 = image[:point1,point2:point3,:]
     real_img1 = image[:point1,point3:,:]
 
@@ -313,7 +322,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         list_gene_losses = [float(x) for x in list_gene_losses]
     
         # verbose training progress
-        if batch % 10 == 0:
+        if batch % 1 == 0:
             # Show we are alive
             elapsed = int(time.time() - start_time)/60
             err_log = 'Progress[{0:3f}%], ETA[{1:4f}m], Batch [{2:4f}], G_MSE_Loss[{3}], G_DC_Loss[{4:5f}], G_LS_Loss[{5:3.3f}], D_Real_Loss[{6:3.3f}], D_Fake_Loss[{7:3.3f}]'.format(

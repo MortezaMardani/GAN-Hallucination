@@ -509,7 +509,6 @@ def _train():
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
     
-    
     if tf.gfile.Exists(metafile):
         saver = tf.train.Saver()
         print("Loading checkpoint from file `%s'" % (filename,))
