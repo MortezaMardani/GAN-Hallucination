@@ -628,16 +628,15 @@ def deconv(batch_input, out_channels, size_kernel=3):
         conv = tf.nn.conv2d_transpose(batch_input, filter, [batch, in_height * 2, in_width * 2, out_channels], [1, 2, 2, 1], padding="SAME")
         return conv        
 
-def lrelu(x, a):
+def lrelu(x, a = 0.3):
     with tf.name_scope("lrelu"):
+        return tf.maximum(x, tf.multiply(x, a))
         # adding these together creates the leak part and linear part
         # then cancels them out by subtracting/adding an absolute value term
         # leak: a*x/2 - a*abs(x)/2
         # linear: x/2 + abs(x)/2
 
         # this block looks like it has 2 inputs on the graph unless we do this
-        x = tf.identity(x)
-        return (0.5 * (1 + a)) * x + (0.5 * (1 - a)) * tf.abs(x)
 
 def batchnorm(input):
     with tf.variable_scope("batchnorm"):
@@ -666,6 +665,59 @@ def Fourier(x, separate_complex=True):
     # y = y[:,:,:,-1]
     return y_complex
 
+def variational_autoencoder(sess,features,labels,masks,train_phase,channels = 2,layer_output_skip = 5):
+    print("Use variational autoencoder model")
+    activation = lrelu
+    keep_prob = 1
+    n_latent = 8
+    batch_size = FLAGS.batch_size
+    img = 0
+    mn = 0
+    sd = 0
+    reshaped_dim = [-1,80,64,channels]
+    inputs_decoder = 80*64*channels / 2
+    old_vars = tf.global_variables()
+
+    with tf.variable_scope("var_encoder"):
+        x = tf.layers.conv2d(features,filters = 64,kernel_size = 4,strides = 2,padding = "same",activation = activation)
+        x = tf.nn.dropout(x, keep_prob)
+        x = tf.layers.conv2d(x, filters=64, kernel_size=4, strides=2, padding='same', activation=activation)
+        x = tf.nn.dropout(x, keep_prob)
+        x = tf.layers.conv2d(x, filters=64, kernel_size=4, strides=2, padding='same', activation=activation)
+        x = tf.nn.dropout(x, keep_prob)
+        x = tf.contrib.layers.flatten(x)
+        mn = tf.layers.dense(x, units=n_latent)
+        sd = 0.5 * tf.layers.dense(x, units=n_latent) 
+        epsilon = tf.random_normal(tf.stack([batch_size, n_latent]))
+        z  = mn + tf.multiply(epsilon, tf.exp(sd))
+
+
+    with tf.variable_scope("var_decoder"):
+        x = tf.layers.dense(z, units=inputs_decoder, activation=lrelu)
+        x = tf.layers.dense(x, units=inputs_decoder * 2, activation=lrelu)
+        x = tf.reshape(x, reshaped_dim)
+        x = tf.layers.conv2d_transpose(x, filters=64, kernel_size=4, strides=2, padding='same', activation=tf.nn.relu)
+        x = tf.nn.dropout(x, keep_prob)
+        x = tf.layers.conv2d_transpose(x, filters=64, kernel_size=4, strides=2, padding='same', activation=tf.nn.relu)
+        x = tf.nn.dropout(x, keep_prob)
+        x = tf.layers.conv2d_transpose(x, filters=64, kernel_size=4, strides=1, padding='same', activation=tf.nn.relu)
+        x = tf.contrib.layers.flatten(x)
+        x = tf.layers.dense(x, units=320*256*channels, activation=tf.nn.sigmoid)
+        img = tf.reshape(x, shape=[-1, 320, 256,channels])
+
+    ### Data consistency
+
+    masks_comp = 1.0 - masks
+    correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
+    correct_image = upsample(correct_kspace, masks)
+    
+    output = correct_image
+    output_layers = [correct_image]
+
+    new_vars = tf.global_variables()
+    gen_vars = list(set(new_vars) - set(old_vars))
+
+    return output, gen_vars, output_layers, mn, sd
 
 
 def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channels = 2, layer_output_skip=5):
@@ -1065,12 +1117,14 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     train_phase = tf.placeholder_with_default(True, shape=())
 
 
-    architecture = 'aec' #only deal with the autoencoder
+    architecture = 'vae' #only deal with the variational autoencoder
 
 
     # TBD: Is there a better way to instance the generator?
     if architecture == 'aec':
         function_generator = lambda x,y,z,w,t: _generator_encoder_decoder(x,y,z,w,t)
+    elif architecture == 'vae':
+        function_generator = lambda x,y,z,w,t: variational_autoencoder(x,y,z,w,t)
     elif architecture == 'pool':
         function_generator = lambda x,y,z,w: _generator_model_with_pool(x,y,z,w)
     elif architecture.startswith('var'):
@@ -1107,20 +1161,20 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         for i in range(FLAGS.num_iteration):
 
              #train
-             gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks,train_phase)
+             gene_output, gene_var_list, gene_layers, mn, sd = function_generator(sess, gene_output, labels, masks,train_phase)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
 
              scope.reuse_variables()
              #test
-             gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
+             gene_moutput, _ , gene_mlayers, mn, sd = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
              #mask_list.append(gene_mlayers[3])
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0 = function_generator(sess, label_minput, label_minput, masks,train_phase)
+             gene_moutput_0, _ , gene_mlayers_0, mn, sd = function_generator(sess, label_minput, label_minput, masks,train_phase)
              #mask_list_0 = gene_mlayers_0[3]
 
              #nmse_t = tf.square(tf.divide(tf.norm(gene_moutput - labels), tf.norm(labels)))
@@ -1161,7 +1215,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
             
         disc_fake_output, _, _ = _discriminator_model(sess, features, gene_output_real, hybrid_disc=FLAGS.hybrid_disc)
 
-    return [gene_minput, label_minput, gene_moutput, gene_moutput_list,
+    return [mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
             gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
             disc_real_output, disc_fake_output, disc_var_list, train_phase,disc_layers, eta, nmse, kappa]   
 
@@ -1251,7 +1305,7 @@ def loss_DSSIS_tf11(y_true, y_pred, patch_size=5, batch_size=-1):
     # ssim = tf.select(tf.is_nan(ssim), K.zeros_like(ssim), ssim)
     return tf.reduce_mean(((1.0 - ssim) / 2), name='ssim_loss')
 
-def create_generator_loss(disc_output, gene_output, gene_output_list, features, labels, masks):
+def create_generator_loss(disc_output, gene_output, gene_output_list, features, labels, masks, mn, sd):
     
     # Cross entropy GAN cost
     cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_output, labels=tf.ones_like(disc_output))
@@ -1284,8 +1338,8 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
     gene_l1_loss = 0
     for j in range(FLAGS.num_iteration):
 
-        gene_l2_loss =  gene_l2_loss + tf.cast(tf.reduce_mean(tf.square(tf.abs(gene_output_list[j] - labels)), name='gene_l2_loss'), tf.float32)
-        gene_l1_loss =  gene_l2_loss + tf.cast(tf.reduce_mean(tf.abs(gene_output_list[j] - labels), name='gene_l2_loss'), tf.float32)
+        gene_l2_loss =  gene_l2_loss + tf.cast(tf.reduce_sum(tf.square(tf.abs(gene_output_list[j] - labels)), name='gene_l2_loss'), tf.float32)
+        gene_l1_loss =  gene_l2_loss + tf.cast(tf.reduce_sum(tf.abs(gene_output_list[j] - labels), name='gene_l2_loss'), tf.float32)
     
      
     '''
@@ -1297,6 +1351,13 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
     # mse loss
     gene_mse_loss = tf.add(FLAGS.gene_l1l2_factor * gene_l1_loss, 
                         (1.0 - FLAGS.gene_l1l2_factor) * gene_l2_loss, name='gene_mse_loss')
+
+
+    # Add in KL divergence term to enforce normal constraint
+
+    latent_loss = -0.5 * tf.reduce_sum(1.0 + 2.0 * sd - tf.square(mn) - tf.exp(2.0 * sd), 1)
+
+    gene_mse_loss += latent_loss
 
     #ssim loss
     gene_ssim_loss = loss_DSSIS_tf11(labels, gene_output)

@@ -274,7 +274,7 @@ def get_filenames(dir_file='', shuffle_filename=False):
 
 
 
-def setup_tensorflow(gpu_memory_fraction=0.3):
+def setup_tensorflow(gpu_memory_fraction=0.4):
     # Create session
     config = tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)
     if FLAGS.gpu_memory_fraction>0:
@@ -483,14 +483,14 @@ def _train():
                            tf.random_normal(train_features.get_shape(), stddev=noise_level)
 
     # Create and initialize model
-    [gene_minput, label_minput, gene_moutput, gene_moutput_list, \
+    [mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
      disc_real_output, disc_fake_output, disc_var_list, train_phase,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
 
     #train_phase = tf.placeholder(tf.bool, [])
     
-    gene_loss, gene_dc_loss, gene_ls_loss, gene_mse_loss, list_gene_losses, gene_mse_factor = srez_model.create_generator_loss(disc_fake_output, gene_output, gene_output_list, train_features, train_labels, train_masks)
+    gene_loss, gene_dc_loss, gene_ls_loss, gene_mse_loss, list_gene_losses, gene_mse_factor = srez_model.create_generator_loss(disc_fake_output, gene_output, gene_output_list, train_features, train_labels, train_masks, mn, sd)
     disc_real_loss, disc_fake_loss = \
                      srez_model.create_discriminator_loss(disc_real_output, disc_fake_output)
     disc_loss = tf.add(disc_real_loss, disc_fake_loss, name='disc_loss')
@@ -508,6 +508,8 @@ def _train():
     filename = 'checkpoint_new.txt'
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
+
+    """
     
     if tf.gfile.Exists(metafile):
         saver = tf.train.Saver()
@@ -516,11 +518,13 @@ def _train():
     else:
         print("No checkpoint `%s', train from scratch" % (filename,))
         sess.run(tf.global_variables_initializer())
-
+"""
    
 
-    #print("No checkpoint `%s', train from scratch" % (filename,))
-    #sess.run(tf.global_variables_initializer())
+    print("No checkpoint `%s', train from scratch" % (filename,))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
+
+    sess.run(tf.global_variables_initializer())
 
 
     # Train model

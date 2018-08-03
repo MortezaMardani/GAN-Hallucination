@@ -299,6 +299,8 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         batch += 1
         gene_ls_loss = gene_dc_loss = gene_loss = gene_mse_loss = disc_real_loss = disc_fake_loss = -1.234
 
+
+
         #first train based on MSE and then GAN
         if batch < 1e4:
            feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1.0,td.train_phase: True}
@@ -322,7 +324,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         list_gene_losses = [float(x) for x in list_gene_losses]
     
         # verbose training progress
-        if batch % 1 == 0:
+        if batch % 100 == 0:
             # Show we are alive
             elapsed = int(time.time() - start_time)/60
             err_log = 'Progress[{0:3f}%], ETA[{1:4f}m], Batch [{2:4f}], G_MSE_Loss[{3}], G_DC_Loss[{4:5f}], G_LS_Loss[{5:3.3f}], D_Real_Loss[{6:3.3f}], D_Fake_Loss[{7:3.3f}]'.format(
