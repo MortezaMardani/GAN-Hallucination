@@ -509,6 +509,7 @@ def _train():
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
     
+    """
     if tf.gfile.Exists(metafile):
         saver = tf.train.Saver()
         print("Loading checkpoint from file `%s'" % (filename,))
@@ -516,11 +517,12 @@ def _train():
     else:
         print("No checkpoint `%s', train from scratch" % (filename,))
         sess.run(tf.global_variables_initializer())
-
+"""
    
 
-    #print("No checkpoint `%s', train from scratch" % (filename,))
-    #sess.run(tf.global_variables_initializer())
+    print("No checkpoint `%s', train from scratch" % (filename,))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
+    sess.run(tf.global_variables_initializer())
 
 
     # Train model
