@@ -135,10 +135,10 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
 tf.app.flags.DEFINE_float('learning_beta1', 0.9,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.00015,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.000015,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
-tf.app.flags.DEFINE_integer('learning_rate_half_life', 50000,
+tf.app.flags.DEFINE_integer('learning_rate_half_life', 10000,
                             "Number of batches until learning rate is halved")
 
 tf.app.flags.DEFINE_bool('log_device_placement', False,
@@ -274,7 +274,7 @@ def get_filenames(dir_file='', shuffle_filename=False):
 
 
 
-def setup_tensorflow(gpu_memory_fraction=0.4):
+def setup_tensorflow(gpu_memory_fraction=1):
     # Create session
     config = tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)
     if FLAGS.gpu_memory_fraction>0:
@@ -314,7 +314,7 @@ def _demo():
     # Create and initialize model
     [gene_minput, gene_moutput,
      gene_output, gene_var_list,
-     disc_real_output, disc_fake_output, disc_var_list,train_phase] = \
+     disc_real_output, disc_fake_output, disc_var_list,train_phase,z_val] = \
             srez_model.create_model(sess, features, labels, masks)
 
     # Restore variables from checkpoint
@@ -485,10 +485,9 @@ def _train():
     # Create and initialize model
     [mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
-     disc_real_output, disc_fake_output, disc_var_list, train_phase,disc_layers, eta, nmse, kappa] = \
+     disc_real_output, disc_fake_output, disc_var_list, train_phase,z_val,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
 
-    #train_phase = tf.placeholder(tf.bool, [])
     
     gene_loss, gene_dc_loss, gene_ls_loss, gene_mse_loss, list_gene_losses, gene_mse_factor = srez_model.create_generator_loss(disc_fake_output, gene_output, gene_output_list, train_features, train_labels, train_masks, mn, sd)
     disc_real_loss, disc_fake_loss = \
@@ -522,7 +521,7 @@ def _train():
    
 
     print("No checkpoint `%s', train from scratch" % (filename,))
-    print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])) #number of parameters in model
 
     sess.run(tf.global_variables_initializer())
 
