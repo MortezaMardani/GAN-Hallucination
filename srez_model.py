@@ -722,6 +722,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     def f2(): return z_val
 
     decoder_input = tf.cond(train_phase, f1, f2)
+    decoder_input = tf.zeros_like(decoder_input)
 
     with tf.variable_scope("var_decoder"):
         num_for_dense = num_filters * 4 * 40 * 32
@@ -1219,9 +1220,9 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
              
              scope.reuse_variables()
-             """
+             
              #test
-             gene_moutput, _ , gene_mlayers, mn, sd = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
+             gene_moutput, _ , gene_mlayers, mn1, sd1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val)
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
@@ -1229,9 +1230,10 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0, mn, sd = function_generator(sess, label_minput, label_minput, masks,train_phase)
+             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val)
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              #mask_list_0 = gene_mlayers_0[3]
+             """
 
              #nmse_t = tf.square(tf.divide(tf.norm(gene_moutput - labels), tf.norm(labels)))
              #nmse.append(nmse_t)
@@ -1393,8 +1395,8 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
     gene_l1_loss = 0
     for j in range(FLAGS.num_iteration):
 
-        gene_l2_loss =  gene_l2_loss + tf.cast(tf.reduce_sum(tf.square(tf.abs(gene_output_list[j] - labels)), name='gene_l2_loss'), tf.float32)
-        gene_l1_loss =  gene_l2_loss + tf.cast(tf.reduce_sum(tf.abs(gene_output_list[j] - labels), name='gene_l2_loss'), tf.float32)
+        gene_l2_loss =  gene_l2_loss + tf.cast(tf.reduce_mean(tf.square(tf.abs(gene_output_list[j] - labels)), name='gene_l2_loss'), tf.float32)
+        gene_l1_loss =  gene_l2_loss + tf.cast(tf.reduce_mean(tf.abs(gene_output_list[j] - labels), name='gene_l2_loss'), tf.float32)
     
      
     '''
@@ -1410,7 +1412,7 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
 
     # Add in KL divergence term to enforce normal constraint
 
-    gene_mse_loss = tf.reduce_mean(tf.square(gene_output - labels))
+    #gene_mse_loss = tf.reduce_mean(tf.square(gene_output - labels))
 
     latent_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + sd - tf.square(mn) - tf.exp(sd), 1))
 
@@ -1503,6 +1505,7 @@ def create_optimizers(gene_loss, gene_var_list,
     #[print('grad', grad) for grad, var in grads_and_vars]
     capped_grads_and_vars = [(tf.clip_by_value(gv[0], -1000000000., 1000000000.), gv[1]) for gv in grads_and_vars]
     gene_minimize = gene_opti.apply_gradients(capped_grads_and_vars)
+
     
 
 

@@ -24,6 +24,10 @@ def compute_SNR(gt, recon):
 def _summarize_progress(td,gene_output,train_feature,train_label,batch,index_batch_test):
     print("summarizing")
 
+
+
+
+
     gene_output = gene_output[0]
 
     size = [train_label.shape[1], train_label.shape[2]]
@@ -259,27 +263,27 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
         if batch % FLAGS.summary_period == 0:
             # loop different test batch
-            for index_batch_test in range(10):
+            for index_batch_test in range(8):
 
                 # get test feature
                 train_feature = list_train_features[index_batch_test]
                 train_label = list_train_labels[index_batch_test]
             
                 # Show progress with test features
-                feed_dict = {td.gene_minput: train_feature,td.train_phase: True}
+                feed_dict = {td.gene_minput: train_feature,td.label_minput: train_label,td.train_phase: True}
                 # not export var
                 # ops = [td.gene_moutput, td.gene_mlayers, td.gene_var_list, td.disc_var_list, td.disc_layers]
                 # gene_output, gene_layers, gene_var_list, disc_var_list, disc_layers= td.sess.run(ops, feed_dict=feed_dict)       
                 
-                ops = [td.gene_output]
+                ops = [td.gene_moutput]
                 
                 # get timing
                 forward_passing_time = time.time()
-                gene_output = td.sess.run(ops, feed_dict=feed_dict)       
+                gene_moutput = td.sess.run(ops, feed_dict=feed_dict)       
                 inference_time = time.time() - forward_passing_time
 
                 print("at summarizing stage")
-                _summarize_progress(td, gene_output, train_feature, train_label,batch,index_batch_test)
+                _summarize_progress(td, gene_moutput, train_feature, train_label,batch,index_batch_test)
                 # try to reduce mem
                 gene_output = None
                 gene_layers = None
