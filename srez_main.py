@@ -135,7 +135,7 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
 tf.app.flags.DEFINE_float('learning_beta1', 0.9,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.000015,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.0000015,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 10000,

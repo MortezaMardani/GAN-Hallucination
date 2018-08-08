@@ -102,7 +102,7 @@ def convert_to_image(gene_output,td):
 
 
 def generate_new_images(train_data):
-    n_latent = 8
+    n_latent = 512
     td = train_data
     shape = [FLAGS.batch_size,n_latent]
     num_to_generate = 10

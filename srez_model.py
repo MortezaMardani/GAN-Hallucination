@@ -669,7 +669,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     print("Use variational autoencoder model")
     activation = lrelu
     keep_prob = 1
-    n_latent = 8
+    n_latent = 512
     batch_size = FLAGS.batch_size
     img = 0
     mn = 0
@@ -679,21 +679,44 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     inputs_decoder = 40*32*channels
     old_vars = tf.global_variables()
 
-    features = tf.image.resize_images(features,[80,64])
-    print(features.shape)
+    #features = tf.image.resize_images(features,[80,64])
+    print(features.shape)   #(b_size,320,256,2)
+
+    num_filters = 64
 
     with tf.variable_scope("var_encoder"):
-        x = tf.layers.conv2d(features,filters = 3,kernel_size = 3,strides = 2,padding = "same",activation = activation)
-        x = tf.nn.dropout(x, keep_prob)
-        x = tf.layers.conv2d(x, filters=8, kernel_size=3, strides=2, padding='same', activation=activation)
-        x = tf.nn.dropout(x, keep_prob)
-        x = tf.layers.conv2d(x, filters=16, kernel_size=3, strides=1, padding='same', activation=activation)
-        x = tf.nn.dropout(x, keep_prob)
+        x = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #x = tf.nn.dropout(x, keep_prob)
+        #size = (b_size,160,128,16)
+
+        x = tf.layers.conv2d(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #x = tf.nn.dropout(x, keep_prob)
+        #size = (b_size,80,64,32)
+
+        x = tf.layers.conv2d(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same', activation=activation)
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #x = tf.nn.dropout(x, keep_prob)
+        #size = (b_size,40,32,64)
+
+        x = tf.layers.conv2d(x, filters=num_filters*8, kernel_size=5, strides=2, padding='same', activation=activation)
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #x = tf.nn.dropout(x, keep_prob)
+        #size = (b_size,20,16,128)
+
         x = tf.contrib.layers.flatten(x)
-        mn = tf.layers.dense(x, units=n_latent)
-        sd = 0.5 * tf.layers.dense(x, units=n_latent) 
+        #size = (b_size,20*16*128)
+
+        mn = tf.layers.dense(x, units=n_latent)  
+        #size = (b_size,64)
+
+        sd = tf.layers.dense(x, units=n_latent) 
+        #size = (b_size,64)
+
         epsilon = tf.random_normal(tf.stack([batch_size, n_latent]))
-        z  = mn + tf.multiply(epsilon, tf.exp(sd))
+
+        z  = tf.add(mn, tf.multiply(epsilon, tf.exp(sd)))
 
     def f1(): return z
     def f2(): return z_val
@@ -701,17 +724,33 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     decoder_input = tf.cond(train_phase, f1, f2)
 
     with tf.variable_scope("var_decoder"):
-        x = tf.layers.dense(decoder_input, units=inputs_decoder, activation=lrelu)
-        x = tf.reshape(x, reshaped_dim)
-        x = tf.layers.conv2d_transpose(x, filters=16, kernel_size=3, strides=2, padding='same', activation=tf.nn.relu)
-        x = tf.nn.dropout(x, keep_prob)
-        x = tf.layers.conv2d_transpose(x, filters=8, kernel_size=3, strides=2, padding='same', activation=tf.nn.relu)
-        x = tf.nn.dropout(x, keep_prob)
-        x = tf.layers.conv2d_transpose(x, filters=3, kernel_size=3, strides=1, padding='same', activation=tf.nn.relu)
-        x = tf.contrib.layers.flatten(x)
-        x = tf.layers.dense(x, units=40*32*channels, activation=tf.nn.sigmoid)
-        img = tf.reshape(x, shape=[-1, 40, 32,channels])
-        img = tf.image.resize_images(img,[320,256])
+        num_for_dense = num_filters * 4 * 40 * 32
+        decoder_input.set_shape([batch_size,n_latent])
+        x = tf.layers.dense(decoder_input, units=num_for_dense, activation=lrelu)   #(b_size,64*40*32)
+        x = tf.reshape(x, [-1,40,32,num_filters*4])  #(b_size,40,32,64)
+
+        #upsample
+
+        x = tf.layers.conv2d_transpose(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same')
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #x = tf.nn.dropout(x, keep_prob)
+        #size = (b_size,80,64,64)
+
+
+        x = tf.layers.conv2d_transpose(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #x = tf.nn.dropout(x, keep_prob)
+        #size = (b_size,160,128,32)
+
+
+        x = tf.layers.conv2d_transpose(x, filters=num_filters // 2, kernel_size=5, strides=2, padding='same')
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        #size = (b_size,320,256,8)
+
+        x = tf.layers.conv2d_transpose(x, filters=channels, kernel_size=5, strides=1, padding='same',activation = tf.nn.sigmoid)
+        img = x
+        #size = (b_size,320,256,2)
+
 
     ### Data consistency
 
@@ -1117,7 +1156,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     rows      = int(features.get_shape()[1])
     cols      = int(features.get_shape()[2])
     channels  = int(features.get_shape()[3])
-    n_latent = 8
+    n_latent = 512
     temp_zeros = tf.zeros([FLAGS.batch_size,n_latent],tf.float32)
 
     #print('channels', features.get_shape())
@@ -1371,9 +1410,11 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
 
     # Add in KL divergence term to enforce normal constraint
 
-    latent_loss = -0.5 * tf.reduce_sum(1.0 + 2.0 * sd - tf.square(mn) - tf.exp(2.0 * sd), 1)
+    gene_mse_loss = tf.reduce_mean(tf.square(gene_output - labels))
 
-    #gene_mse_loss = tf.reduce_mean(gene_mse_loss + latent_loss)
+    latent_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + sd - tf.square(mn) - tf.exp(sd), 1))
+
+    gene_mse_loss = gene_mse_loss + 0.005*latent_loss
 
 
     #ssim loss
