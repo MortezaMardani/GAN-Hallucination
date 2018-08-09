@@ -668,7 +668,7 @@ def Fourier(x, separate_complex=True):
 def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channels = 2,layer_output_skip = 5):
     print("Use variational autoencoder model")
     activation = lrelu
-    keep_prob = 1
+    keep_prob = 0.7
     n_latent = 512
     batch_size = FLAGS.batch_size
     img = 0
@@ -687,22 +687,22 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     with tf.variable_scope("var_encoder"):
         x = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #x = tf.nn.dropout(x, keep_prob)
+        x = tf.nn.dropout(x, keep_prob)
         #size = (b_size,160,128,16)
 
         x = tf.layers.conv2d(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #x = tf.nn.dropout(x, keep_prob)
+        x = tf.nn.dropout(x, keep_prob)
         #size = (b_size,80,64,32)
 
         x = tf.layers.conv2d(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same', activation=activation)
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #x = tf.nn.dropout(x, keep_prob)
+        x = tf.nn.dropout(x, keep_prob)
         #size = (b_size,40,32,64)
 
         x = tf.layers.conv2d(x, filters=num_filters*8, kernel_size=5, strides=2, padding='same', activation=activation)
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #x = tf.nn.dropout(x, keep_prob)
+        x = tf.nn.dropout(x, keep_prob)
         #size = (b_size,20,16,128)
 
         x = tf.contrib.layers.flatten(x)
@@ -719,10 +719,10 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
         z  = tf.add(mn, tf.multiply(epsilon, tf.exp(sd)))
 
     def f1(): return z
-    def f2(): return z_val
+    def f2(): return z
+    #def f2(): return z_val
 
     decoder_input = tf.cond(train_phase, f1, f2)
-    decoder_input = tf.zeros_like(decoder_input)
 
     with tf.variable_scope("var_decoder"):
         num_for_dense = num_filters * 4 * 40 * 32
@@ -734,13 +734,13 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
 
         x = tf.layers.conv2d_transpose(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #x = tf.nn.dropout(x, keep_prob)
+        x = tf.nn.dropout(x, keep_prob)
         #size = (b_size,80,64,64)
 
 
         x = tf.layers.conv2d_transpose(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #x = tf.nn.dropout(x, keep_prob)
+        x = tf.nn.dropout(x, keep_prob)
         #size = (b_size,160,128,32)
 
 
@@ -755,12 +755,16 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
 
     ### Data consistency
 
-    masks_comp = 1.0 - masks
-    correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
-    correct_image = upsample(correct_kspace, masks)
+    def l1():
+        return img
+    def l2():
+        masks_comp = 1.0 - masks
+        correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
+        correct_image = upsample(correct_kspace, masks)
+        return correct_image
     
-    output = correct_image
-    output_layers = [correct_image]
+    output = tf.cond(train_phase,l1,l2)
+    output_layers = [output]
 
     new_vars = tf.global_variables()
     gen_vars = list(set(new_vars) - set(old_vars))
@@ -1410,14 +1414,16 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
                         (1.0 - FLAGS.gene_l1l2_factor) * gene_l2_loss, name='gene_mse_loss')
 
 
-    # Add in KL divergence term to enforce normal constraint
+    print("GENE",gene_output)
+    print("LABEL",labels)
+    print("LOSS",gene_mse_loss)
 
-    #gene_mse_loss = tf.reduce_mean(tf.square(gene_output - labels))
+
+    # Add in KL divergence term to enforce normal constraint
 
     latent_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + sd - tf.square(mn) - tf.exp(sd), 1))
 
-    gene_mse_loss = gene_mse_loss + 0.005*latent_loss
-
+    gene_mse_loss = gene_mse_loss + 1e-4 * latent_loss
 
     #ssim loss
     gene_ssim_loss = loss_DSSIS_tf11(labels, gene_output)
@@ -1503,7 +1509,13 @@ def create_optimizers(gene_loss, gene_var_list,
     ##method 1. the right method
     grads_and_vars = gene_opti.compute_gradients(gene_loss)  #, gene_var_list)
     #[print('grad', grad) for grad, var in grads_and_vars]
-    capped_grads_and_vars = [(tf.clip_by_value(gv[0], -1000000000., 1000000000.), gv[1]) for gv in grads_and_vars]
+
+    def clipNotNone(grads):
+        if grads is None:
+            return grads
+        return tf.clip_by_value(grads,-1000000000., 1000000000.)
+
+    capped_grads_and_vars = [(clipNotNone(grad),var) for grad,var in grads_and_vars]
     gene_minimize = gene_opti.apply_gradients(capped_grads_and_vars)
 
     

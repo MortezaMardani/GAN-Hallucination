@@ -82,6 +82,15 @@ def _summarize_progress(td,gene_output,train_feature,train_label,batch,index_bat
     scipy.misc.toimage(image, cmin=0., cmax=1.).save(filename)
     print("    Saved %s" % (filename,))
 
+    dim1,dim2,dim3 = image.shape
+    horizontal_2 = dim2 // 2
+    horizontal_3 = 3*dim2 // 4
+    recon = image[:,horizontal_2:horizontal_3,:]
+    gt = image[:,horizontal_3:,:]
+    snr = compute_SNR(gt,recon)
+    print("SNR is ",snr)
+
+
 
 def convert_to_image(gene_output,td):
     size = [FLAGS.sample_size,FLAGS.sample_size_y]
@@ -270,7 +279,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
                 train_label = list_train_labels[index_batch_test]
             
                 # Show progress with test features
-                feed_dict = {td.gene_minput: train_feature,td.label_minput: train_label,td.train_phase: True}
+                feed_dict = {td.gene_minput: train_feature,td.label_minput: train_label,td.train_phase: False}
                 # not export var
                 # ops = [td.gene_moutput, td.gene_mlayers, td.gene_var_list, td.disc_var_list, td.disc_layers]
                 # gene_output, gene_layers, gene_var_list, disc_var_list, disc_layers= td.sess.run(ops, feed_dict=feed_dict)       
