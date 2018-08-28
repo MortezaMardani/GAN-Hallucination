@@ -667,97 +667,119 @@ def Fourier(x, separate_complex=True):
 
 def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channels = 2,layer_output_skip = 5):
     print("Use variational autoencoder model")
+    old_vars = tf.global_variables()
+
     activation = lrelu
-    keep_prob = 0.7
-    n_latent = 512
+    keep_prob = 0.6
+    n_latent = 1024
     batch_size = FLAGS.batch_size
     img = 0
     mn = 0
     sd = 0
     z = 0
-    reshaped_dim = [-1,40,32,channels]
-    inputs_decoder = 40*32*channels
-    old_vars = tf.global_variables()
+    x1 = 0
+    x2 = 0
+    x3 = 0
+    x4 = 0
+ 
 
-    #features = tf.image.resize_images(features,[80,64])
-    print(features.shape)   #(b_size,320,256,2)
+    #features = tf.image.resize_images(features,[160,128])
+    print(features.shape)   #(b_size,160,128,2)
 
     num_filters = 64
+    encoder_layers = []
 
     with tf.variable_scope("var_encoder"):
-        x = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
-        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        x = tf.nn.dropout(x, keep_prob)
-        #size = (b_size,160,128,16)
+        x1 = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
+        x1 = tf.contrib.layers.batch_norm(x1,activation_fn = activation)
+        x1 = tf.nn.dropout(x1, keep_prob)
+        encoder_layers.append(x1)
+        #size = (b_size,80,64,128)
 
-        x = tf.layers.conv2d(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
-        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        x = tf.nn.dropout(x, keep_prob)
-        #size = (b_size,80,64,32)
+        x2 = tf.layers.conv2d(x1, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
+        x2 = tf.contrib.layers.batch_norm(x2,activation_fn = activation)
+        x2 = tf.nn.dropout(x2, keep_prob)
+        encoder_layers.append(x2)
+        #size = (b_size,40,32,256)
 
-        x = tf.layers.conv2d(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same', activation=activation)
-        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        x = tf.nn.dropout(x, keep_prob)
-        #size = (b_size,40,32,64)
+        x3 = tf.layers.conv2d(x2, filters=num_filters*4, kernel_size=5, strides=2, padding='same', activation=activation)
+        x3 = tf.contrib.layers.batch_norm(x3,activation_fn = activation)
+        x3 = tf.nn.dropout(x3, keep_prob)
+        encoder_layers.append(x3)
+        #size = (b_size,20,16,512)
 
-        x = tf.layers.conv2d(x, filters=num_filters*8, kernel_size=5, strides=2, padding='same', activation=activation)
-        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        x = tf.nn.dropout(x, keep_prob)
-        #size = (b_size,20,16,128)
+        x4 = tf.layers.conv2d(x3, filters=num_filters*8, kernel_size=5, strides=2, padding='same', activation=activation)
+        x4 = tf.contrib.layers.batch_norm(x4,activation_fn = activation)
+        x4 = tf.nn.dropout(x4, keep_prob)
+        encoder_layers.append(x4)
+        #size = (b_size,10,8,1024)
 
-        x = tf.contrib.layers.flatten(x)
-        #size = (b_size,20*16*128)
+        x = tf.contrib.layers.flatten(x4)
+        #size = (b_size,10*8*1024)
 
-        mn = tf.layers.dense(x, units=n_latent)  
-        #size = (b_size,64)
+        mn = tf.layers.dense(x, units=n_latent)
+        #mn = tf.contrib.layers.batch_norm(mn,activation_fn = tf.identity)  
+        #size = (b_size,1024)
 
-        sd = tf.layers.dense(x, units=n_latent) 
-        #size = (b_size,64)
+        sd = tf.layers.dense(x, units=n_latent)
+        #sd = tf.contrib.layers.batch_norm(sd,activation_fn = tf.nn.softplus)
+        #sd = tf.add(sd,1e-6)
+        #size = (b_size,1024)
 
         epsilon = tf.random_normal(tf.stack([batch_size, n_latent]))
 
-        z  = tf.add(mn, tf.multiply(epsilon, tf.exp(sd)))
+        #z  = tf.add(mn, tf.multiply(epsilon, tf.sqrt(tf.exp(sd))))
+        z = tf.add(mn,tf.multiply(epsilon,tf.exp(sd)))
 
     def f1(): return z
-    def f2(): return z
-    #def f2(): return z_val
+    def f2(): return z_val
 
     decoder_input = tf.cond(train_phase, f1, f2)
 
     with tf.variable_scope("var_decoder"):
-        num_for_dense = num_filters * 4 * 40 * 32
+        num_for_dense = num_filters * 8 * 10 * 8
         decoder_input.set_shape([batch_size,n_latent])
-        x = tf.layers.dense(decoder_input, units=num_for_dense, activation=lrelu)   #(b_size,64*40*32)
-        x = tf.reshape(x, [-1,40,32,num_filters*4])  #(b_size,40,32,64)
+        x = tf.layers.dense(decoder_input, units=num_for_dense, activation=lrelu)   #(b_size,1024*10*8)
+        x = tf.reshape(x, [-1,10,8,num_filters*8])  #(b_size,10,8,1024)
+        x = tf.add(x,x4)
 
         #upsample
-
         x = tf.layers.conv2d_transpose(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
         x = tf.nn.dropout(x, keep_prob)
-        #size = (b_size,80,64,64)
+        x = tf.add(x,x3)
+        #size = (b_size,20,16,512)
 
 
         x = tf.layers.conv2d_transpose(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
         x = tf.nn.dropout(x, keep_prob)
-        #size = (b_size,160,128,32)
+        x = tf.add(x,x2)
+        #size = (b_size,40,32,256)
 
 
-        x = tf.layers.conv2d_transpose(x, filters=num_filters // 2, kernel_size=5, strides=2, padding='same')
+        x = tf.layers.conv2d_transpose(x, filters=num_filters, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-        #size = (b_size,320,256,8)
+        x = tf.add(x,x1)
+        #size = (b_size,80,64,128)
 
-        x = tf.layers.conv2d_transpose(x, filters=channels, kernel_size=5, strides=1, padding='same',activation = tf.nn.sigmoid)
+        x = tf.layers.conv2d_transpose(x, filters=channels, kernel_size=5, strides=2, padding='same',activation = tf.nn.sigmoid)
         img = x
-        #size = (b_size,320,256,2)
+        #size = (b_size,160,128,2)
 
 
     ### Data consistency
+    #img = tf.image.resize_images(img,[320,256])
 
     def l1():
-        return img
+        #return img
+        masks_comp = 1.0 - masks
+        correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
+        correct_image = upsample(correct_kspace, masks)
+        return correct_image
+
     def l2():
+        #return img
         masks_comp = 1.0 - masks
         correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
         correct_image = upsample(correct_kspace, masks)
@@ -1161,7 +1183,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     rows      = int(features.get_shape()[1])
     cols      = int(features.get_shape()[2])
     channels  = int(features.get_shape()[3])
-    n_latent = 512
+    n_latent = 1024
     temp_zeros = tf.zeros([FLAGS.batch_size,n_latent],tf.float32)
 
     #print('channels', features.get_shape())
@@ -1197,7 +1219,8 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
                                                 layer_output_skip=7, num_dc_layers=0)
 
 
-    #gene_var_list = []
+    gene_var_list = []
+    gene_Var_list = []
     gene_layers_list = []
     gene_mlayers_list = []
     gene_output_list = []
@@ -1221,6 +1244,8 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
              #gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks,train_phase)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
+             if i == 0:
+                gene_Var_list = gene_var_list
 
              
              scope.reuse_variables()
@@ -1277,7 +1302,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         disc_fake_output, _, _ = _discriminator_model(sess, features, gene_output_real, hybrid_disc=FLAGS.hybrid_disc)
 
     return [mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
-            gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
+            gene_output, gene_output_list, gene_Var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
             disc_real_output, disc_fake_output, disc_var_list, train_phase,z_val,disc_layers, eta, nmse, kappa]   
 
 
@@ -1423,7 +1448,7 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
 
     latent_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + sd - tf.square(mn) - tf.exp(sd), 1))
 
-    gene_mse_loss = gene_mse_loss + 1e-4 * latent_loss
+    gene_mse_loss = gene_mse_loss #+ 1e-4 * latent_loss
 
     #ssim loss
     gene_ssim_loss = loss_DSSIS_tf11(labels, gene_output)
@@ -1505,6 +1530,7 @@ def create_optimizers(gene_loss, gene_var_list,
                                        beta1=FLAGS.learning_beta1,
                                        name='disc_optimizer')
     
+    '''
     ##gradient clipping 
     ##method 1. the right method
     grads_and_vars = gene_opti.compute_gradients(gene_loss)  #, gene_var_list)
@@ -1517,10 +1543,8 @@ def create_optimizers(gene_loss, gene_var_list,
 
     capped_grads_and_vars = [(clipNotNone(grad),var) for grad,var in grads_and_vars]
     gene_minimize = gene_opti.apply_gradients(capped_grads_and_vars)
-
+    '''
     
-
-
 
     ##method 2
     #print(gene_opti)
@@ -1531,11 +1555,11 @@ def create_optimizers(gene_loss, gene_var_list,
     #print(gene_opti) 
      
 
-    #gene_minimize = gene_opti.minimize(gene_loss, var_list=gene_var_list, name='gene_loss_minimize', global_step=global_step)
+    gene_minimize = gene_opti.minimize(gene_loss, var_list=gene_var_list, name='gene_loss_minimize', global_step=global_step)
     
     disc_minimize = disc_opti.minimize(disc_loss, var_list=disc_var_list, name='disc_loss_minimize', global_step=global_step)
     
-    return (global_step, learning_rate, gene_minimize, disc_minimize)
+    return (global_step, learning_rate, gene_minimize,disc_minimize)
 
 
 

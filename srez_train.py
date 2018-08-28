@@ -95,7 +95,7 @@ def _summarize_progress(td,gene_output,train_feature,train_label,batch,index_bat
 def convert_to_image(gene_output,td):
     size = [FLAGS.sample_size,FLAGS.sample_size_y]
     gene_output = gene_output[0]
-    print(gene_output.shape)
+    #print(gene_output.shape)
     real = gene_output[:,:,:,0]
     img = gene_output[:,:,:,1]
     gene_output_complex = tf.complex(real,img)
@@ -112,28 +112,86 @@ def convert_to_image(gene_output,td):
     image = np.concatenate((image, mag_3rd[:,:,np.newaxis]),axis=2)
     return image
 
+def generate_many(td,feature,lab):
+    num_to_generate = 500
+    count = 1
+    ims = []
+    for i in range(num_to_generate):
+        feed_dict = {td.gene_minput: feature,td.label_minput: lab,td.train_phase: True}
+        ops = [td.gene_moutput]
+        gene_moutput = td.sess.run(ops, feed_dict=feed_dict)
+        ims.append(gene_moutput[0][0,:,:,0])
+        gene_moutput = gene_moutput
+        image = convert_to_image(gene_moutput,td)
+
+        
+        print('save to image,', image.shape)
+        filename = 'image%d.png' % (count)
+        filename = os.path.join("gen_images", filename)
+        scipy.misc.toimage(image, cmin=0., cmax=1.).save(filename)
+        print("    Saved %s" % (filename,))
+
+        if count == 15 or count == 38 or count == 69:
+            filename = 'gen_example%d.out' % count
+            np.save(filename,gene_moutput)
+        count += 1
+
+    pixel_mean = np.mean(np.array(ims), axis=0)
+    pixel_var = np.var(np.array(ims),axis = 0)
+    filename = 'new_mask_mean_2.5.out'
+    np.save(filename,pixel_mean)
+
+    filename = 'new_mask_var_2.5.out'
+    np.save(filename,pixel_var)
 
 
-def generate_new_images(train_data):
-    n_latent = 512
+
+
+def generate_new_images(train_data,label):
+    n_latent = 1024
     td = train_data
     shape = [FLAGS.batch_size,n_latent]
-    num_to_generate = 10
+    num_to_generate = 100
     randoms = [np.random.normal(0, 1, shape) for _ in range(num_to_generate)]
+    MSEs = []
+    SNRs = []
+    recons = []
+
     count = 1
     for vals in randoms:
-        feed_dict = {td.train_phase: False,td.z_val: vals}
-        ops = [td.gene_output]
+        feed_dict = {td.train_phase: False,td.z_val: vals,td.label_minput: label}
+        ops = [td.gene_moutput]
         gen_output = td.sess.run(ops,feed_dict)
+        recons.append(gen_output[0][0,:,:,0])
+        MSEs.append(((label - gen_output)**2).mean())
+        SNRs.append(compute_SNR(label,gen_output))
         image = convert_to_image(gen_output,td)
 
         #save image
+        
         print('save to image,', image.shape)
         filename = 'image%d.png' % (count)
         filename = os.path.join("gen_images", filename)
         scipy.misc.toimage(image, cmin=0., cmax=1.).save(filename)
         print("    Saved %s" % (filename,))
         count += 1
+        
+    print("MSE mean is: ", np.mean(MSEs))
+    print("MSE variance is: ", np.var(MSEs))
+    print("SNR mean is: ", np.mean(SNRs))
+    print("SNR variance is: ",np.var(SNRs))
+    pixel_mean = np.mean(np.array(recons), axis=0)
+    pixel_var = np.var(np.array(recons),axis = 0)
+    print("shapes: ", pixel_mean.shape)
+    print("shapes: ", pixel_var.shape)
+
+    filename = 'mean5.out'
+    np.save(filename,pixel_mean)
+
+    filename = 'var5.out'
+    np.save(filename,pixel_var)
+
+
 
 
 
@@ -201,12 +259,27 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
     # Cache test features and labels (they are small)    
     # update: get all test features
+
+    ###change to test if needed
     list_train_features = []
     list_train_labels = []
-    for batch_train in range(int(num_batch_train)):
-        train_feature, train_label = td.sess.run([td.train_features, td.train_labels])
+    for batch_test in range(int(num_batch_train)):
+        train_feature, train_label = td.sess.run([td.test_features, td.test_labels])  #switch as needed
         list_train_features.append(train_feature)
         list_train_labels.append(train_label)
+    lab = train_label[0]
+    feat = train_feature[0]
+    filename = 'k_space_label.out'
+    np.save(filename,lab)
+
+    filename = 'k_space_input.out'
+    np.save(filename,feat)
+    print("Saved k-space data")
+
+
+
+
+
     print('prepare {0} test feature batches'.format(num_batch_train))
     # print([type(x) for x in list_test_features])
     # print([type(x) for x in list_test_labels])
@@ -215,6 +288,14 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     #tensorboard summary writer
     sum_writer=tf.summary.FileWriter(FLAGS.tensorboard_dir, td.sess.graph)
 
+    filename = 'image_feat.png'
+    filename2 = 'image_lab.png'
+    print(type(list_train_features[302]))
+    print(list_train_features[302].shape)
+    np.save("input.out",list_train_features[302])
+    np.save("gt.out",list_train_labels[302])
+    print("    Saved  input and gt")
+
     while not done:
         batch += 1
         gene_ls_loss = gene_dc_loss = gene_loss = gene_mse_loss = disc_real_loss = disc_fake_loss = -1.234
@@ -222,10 +303,10 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
 
         #first train based on MSE and then GAN
-        if batch < 1e4:
-           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1.0,td.train_phase: True}
+        if batch < 0:
+           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1,td.train_phase: True}
         else:
-           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1.0, td.train_phase: True}  #1/np.sqrt(batch+100-1e3) + 0.9}
+           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 0.95, td.train_phase: True}  #1/np.sqrt(batch+100-1e3) + 0.9}
         #feed_dict = {td.learning_rate : lrval}
         
         # for training 
@@ -270,16 +351,17 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
         ### This stuff is not needed for the VAE so make summary_period flag very high
 
+
         if batch % FLAGS.summary_period == 0:
             # loop different test batch
-            for index_batch_test in range(8):
+            for index_batch_test in range(1):
 
                 # get test feature
                 train_feature = list_train_features[index_batch_test]
                 train_label = list_train_labels[index_batch_test]
             
                 # Show progress with test features
-                feed_dict = {td.gene_minput: train_feature,td.label_minput: train_label,td.train_phase: False}
+                feed_dict = {td.gene_minput: train_feature,td.label_minput: train_label,td.train_phase: True}
                 # not export var
                 # ops = [td.gene_moutput, td.gene_mlayers, td.gene_var_list, td.disc_var_list, td.disc_layers]
                 # gene_output, gene_layers, gene_var_list, disc_var_list, disc_layers= td.sess.run(ops, feed_dict=feed_dict)       
@@ -316,9 +398,23 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
             # Save checkpoint
             _save_checkpoint(td, batch)
 
-    _save_checkpoint(td, batch)
+    #_save_checkpoint(td, batch)
     print('Finished training!')
 
-    generate_new_images(td)
+    lab = list_train_labels[327]
+    feat = list_train_features[327]
+    generate_many(td,feat,lab)
+
+"""
+    input_img = convert_to_image(feat,td)
+    ground_truth = convert_to_image(lab,td)
+
+    filename = 'check_input_img.png'
+    scipy.misc.toimage(input_img, cmin=0., cmax=1.).save(filename)
+
+    filename = 'check_gt_img.png'
+    scipy.misc.toimage(ground_truth, cmin=0., cmax=1.).save(filename)
+"""
+    #generate_new_images(td,lab)
 
 

@@ -93,7 +93,7 @@ tf.app.flags.DEFINE_integer('batch_size', 16,
 tf.app.flags.DEFINE_string('checkpoint_dir', 'checkpoint',
                            "Output folder where checkpoints are dumped.")
 
-tf.app.flags.DEFINE_integer('checkpoint_period', 5000,
+tf.app.flags.DEFINE_integer('checkpoint_period', 4000,
                             "Number of batches in between checkpoints")
 
 tf.app.flags.DEFINE_integer('starting_batch', 0,
@@ -129,16 +129,16 @@ tf.app.flags.DEFINE_float('gene_ls_factor', 1.0,
 tf.app.flags.DEFINE_float('gene_dc_factor', 0.0,
                           "Multiplier for generator data-consistency L2 loss term for data consistency, weighting Data-Consistency with GD-loss for GAN-loss")
 
-tf.app.flags.DEFINE_float('gene_mse_factor', 1.0,
+tf.app.flags.DEFINE_float('gene_mse_factor', 0.9,
                           "Multiplier for generator MSE loss for regression accuracy, weighting MSE VS GAN-loss")
 
-tf.app.flags.DEFINE_float('learning_beta1', 0.9,
+tf.app.flags.DEFINE_float('learning_beta1', 0.5,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.0000015,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.000035,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
-tf.app.flags.DEFINE_integer('learning_rate_half_life', 10000,
+tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
                             "Number of batches until learning rate is halved")
 
 tf.app.flags.DEFINE_bool('log_device_placement', False,
@@ -508,7 +508,6 @@ def _train():
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
 
-    """
     
     if tf.gfile.Exists(metafile):
         saver = tf.train.Saver()
@@ -517,13 +516,12 @@ def _train():
     else:
         print("No checkpoint `%s', train from scratch" % (filename,))
         sess.run(tf.global_variables_initializer())
-"""
+
    
 
-    print("No checkpoint `%s', train from scratch" % (filename,))
-    print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])) #number of parameters in model
-
-    sess.run(tf.global_variables_initializer())
+   #print("No checkpoint `%s', train from scratch" % (filename,))
+    #print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])) #number of parameters in model
+    #sess.run(tf.global_variables_initializer())
 
 
     # Train model
