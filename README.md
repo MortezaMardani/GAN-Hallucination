@@ -1,5 +1,10 @@
 # GAN-Hallucination
-This project investigates the possible "hallucinations" that can be generated when solving linear inverse problems in the realm of medical imaging. The goal is to find such hallucinations, define metrics to quantify them, and identify regularization techniques to make deep neural net reconstructions robust against this sort of artifact creation.
+The "hallucination" of realistic-looking artifacts is a major concern in the reconstruction of medical images, with the potential to mislead radiologists and lead to bad patient outcomes. This project aims to provide a better understanding of the hallucination process through the implementation of a deep VAE-GAN model (in the VAE branch). After training this model, its generative capabilities can be harnessed to generate new reconstructions that can be evaluated both visually and statistically. Future work will involve the development of regularization schemes to prevent hallucinations from occurring.
+
+# Data
+In training the model, we use a knee dataset obtained from patients at Stanford Hospital. Fully sampled images of size 320 by 256 are taken as input, downsampled, and then undersampled to serve as input to the VAE-GAN model.
+
+# Model Architecture
 
 
 # command to run 
@@ -17,7 +22,7 @@ python3  srez_main.py
 --sample_train -1     
 --subsample_test 1000   
 --subsample_train 1000 
---train_time 3000   
+--train_time 100   
 --train_dir  results/
 --checkpoint_dir  checkpoints/
 --tensorboard_dir  tensorboard/
