@@ -9,10 +9,11 @@ The "hallucination" of realistic-looking artifacts is a major concern in the rec
 
 After training this model, its generative capabilities can be harnessed to generate new reconstructions (which lie in the intersection described above) that can be evaluated both visually and statistically. Future work will involve the development of regularization schemes to prevent hallucinations from occurring.
 ## Data
-In training the model, we use a knee dataset obtained from patients at Stanford Hospital. Fully sampled images of size 320 by 256 are taken as input, downsampled, and then undersampled to provide inputs to the VAE-GAN model.
+In training the model, we use a knee dataset obtained from patients at Stanford Hospital. Fully sampled images of size 320 by 256 are taken, downsampled, and then undersampled to provide inputs to the VAE-GAN model.
 
 ## Model Architecture
 The model architecture is shown below, with the VAE (encoder and decoder layers are comprised of strided and transpose convolutions, respectively), a data consistency layer (affine projection), and discriminator (standard ConvNet).
+
 ![alt text](revised_model_architecture.png)
 
 ## Command to Run From Terminal
