@@ -13,7 +13,7 @@ In training the model, we use a knee dataset obtained from patients at Stanford 
 The model architecture is shown below, with the VAE (encoder and decoder layers are comprised of strided and transpose convolutions, respectively), a data consistency layer (affine projection), and discriminator (standard ConvNet).
 ![alt text](revised_model_architecture.png)
 
-# command to run 
+# Command to Run From Terminal
 
 python3  srez_main.py    
 --run train     
