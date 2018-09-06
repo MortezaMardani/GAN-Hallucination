@@ -1,4 +1,6 @@
 # GAN-Hallucination
+
+## Background
 The "hallucination" of realistic-looking artifacts is a major concern in the reconstruction of medical images, with the potential to mislead radiologists and lead to bad patient outcomes. This project aims to provide a better understanding of the hallucination process through the implementation of a deep VAE-GAN model (in the VAE branch). The model learns a manifold of realistic images, and as the venn diagram below shows, intersecting this manifold with the subset of data consistent images (ensuring consistency with physical measurement) creates points corresponding to images with high likelihood of hallucination.
 
 <p align="center">
@@ -6,14 +8,14 @@ The "hallucination" of realistic-looking artifacts is a major concern in the rec
 </p>
 
 After training this model, its generative capabilities can be harnessed to generate new reconstructions (which lie in the intersection described above) that can be evaluated both visually and statistically. Future work will involve the development of regularization schemes to prevent hallucinations from occurring.
-# Data
+## Data
 In training the model, we use a knee dataset obtained from patients at Stanford Hospital. Fully sampled images of size 320 by 256 are taken as input, downsampled, and then undersampled to provide inputs to the VAE-GAN model.
 
-# Model Architecture
+## Model Architecture
 The model architecture is shown below, with the VAE (encoder and decoder layers are comprised of strided and transpose convolutions, respectively), a data consistency layer (affine projection), and discriminator (standard ConvNet).
 ![alt text](revised_model_architecture.png)
 
-# Command to Run From Terminal
+## Command to Run From Terminal
 
 python3  srez_main.py    
 --run train     
