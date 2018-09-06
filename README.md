@@ -5,7 +5,7 @@ The "hallucination" of realistic-looking artifacts is a major concern in the rec
   <img src="fixed_venn.png" height="170">
 </p>
 
-After training this model, its generative capabilities can be harnessed to generate new reconstructions that can be evaluated both visually and statistically. Future work will involve the development of regularization schemes to prevent hallucinations from occurring.
+After training this model, its generative capabilities can be harnessed to generate new reconstructions (which lie in the intersection described above) that can be evaluated both visually and statistically. Future work will involve the development of regularization schemes to prevent hallucinations from occurring.
 # Data
 In training the model, we use a knee dataset obtained from patients at Stanford Hospital. Fully sampled images of size 320 by 256 are taken as input, downsampled, and then undersampled to serve as input to the VAE-GAN model.
 
