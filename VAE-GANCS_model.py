@@ -671,7 +671,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
 
     activation = lrelu
     keep_prob = 0.6
-    n_latent = 1024
+    n_latent = 1024 
     batch_size = FLAGS.batch_size
     img = 0
     mn = 0
@@ -686,7 +686,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     #features = tf.image.resize_images(features,[160,128])
     print(features.shape)   #(b_size,160,128,2)
 
-    num_filters = 64
+    num_filters = 64 #can be adjusted
     encoder_layers = []
 
     with tf.variable_scope("var_encoder"):
