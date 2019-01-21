@@ -7,6 +7,7 @@ import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
 
+#DEMO
 def demo1(sess):
     """Demo based on images dumped during training"""
 
