@@ -84,7 +84,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # Configuration (alphabetically)
 
-tf.app.flags.DEFINE_integer('num_iteration', 2,
+tf.app.flags.DEFINE_integer('num_iteration', 4,
                             "Number of repeatitions for the generator network.")
 
 tf.app.flags.DEFINE_integer('batch_size', 16,
@@ -135,7 +135,7 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 0.9,
 tf.app.flags.DEFINE_float('learning_beta1', 0.5,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.000035,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.00006,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
@@ -204,7 +204,7 @@ tf.app.flags.DEFINE_integer('R_seed', -1,
 tf.app.flags.DEFINE_string('sampling_pattern', '',
                             "specifed file path for undersampling")
 
-tf.app.flags.DEFINE_float('gpu_memory_fraction', 1.0,
+tf.app.flags.DEFINE_float('gpu_memory_fraction', 1,
                             "specified the max gpu fraction used per device")
 
 tf.app.flags.DEFINE_integer('hybrid_disc', 0,
@@ -483,13 +483,15 @@ def _train():
                            tf.random_normal(train_features.get_shape(), stddev=noise_level)
 
     # Create and initialize model
-    [mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
+    [sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
-     disc_real_output, disc_fake_output, disc_var_list, train_phase,z_val,disc_layers, eta, nmse, kappa] = \
+     disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool,z_val,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
 
     
     gene_loss, gene_dc_loss, gene_ls_loss, gene_mse_loss, list_gene_losses, gene_mse_factor = srez_model.create_generator_loss(disc_fake_output, gene_output, gene_output_list, train_features, train_labels, train_masks, mn, sd)
+    #disc_loss,disc_real_loss, disc_fake_loss,gradient_penalty = \
+                     #srez_model.create_discriminator_loss(disc_real_output, disc_fake_output,real_data = tf.identity(train_labels), fake_data = tf.abs(gene_output))
     disc_real_loss, disc_fake_loss = \
                      srez_model.create_discriminator_loss(disc_real_output, disc_fake_output)
     disc_loss = tf.add(disc_real_loss, disc_fake_loss, name='disc_loss')

@@ -665,9 +665,12 @@ def Fourier(x, separate_complex=True):
     # y = y[:,:,:,-1]
     return y_complex
 
-def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channels = 2,layer_output_skip = 5):
+def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_bool, channels = 2,layer_output_skip = 5):
     print("Use variational autoencoder model")
     old_vars = tf.global_variables()
+
+    print("Input shape", features.shape)
+    print("Input type", type(features))
 
     activation = lrelu
     keep_prob = 0.6
@@ -681,10 +684,13 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
     x2 = 0
     x3 = 0
     x4 = 0
+
+    sing_vals = tf.ones([128,1])
  
 
     #features = tf.image.resize_images(features,[160,128])
     print(features.shape)   #(b_size,160,128,2)
+
 
     num_filters = 64
     encoder_layers = []
@@ -695,6 +701,8 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
         x1 = tf.nn.dropout(x1, keep_prob)
         encoder_layers.append(x1)
         #size = (b_size,80,64,128)
+
+
 
         x2 = tf.layers.conv2d(x1, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
         x2 = tf.contrib.layers.batch_norm(x2,activation_fn = activation)
@@ -713,6 +721,8 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
         x4 = tf.nn.dropout(x4, keep_prob)
         encoder_layers.append(x4)
         #size = (b_size,10,8,1024)
+
+        
 
         x = tf.contrib.layers.flatten(x4)
         #size = (b_size,10*8*1024)
@@ -743,6 +753,8 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
         x = tf.reshape(x, [-1,10,8,num_filters*8])  #(b_size,10,8,1024)
         x = tf.add(x,x4)
 
+
+
         #upsample
         x = tf.layers.conv2d_transpose(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same')
         x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
@@ -763,35 +775,100 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,channel
         x = tf.add(x,x1)
         #size = (b_size,80,64,128)
 
+
         x = tf.layers.conv2d_transpose(x, filters=channels, kernel_size=5, strides=2, padding='same',activation = tf.nn.sigmoid)
         img = x
+
+        masks_comp = 1.0 - masks
+        correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
+        correct_image = upsample(correct_kspace, masks)
+        img = correct_image
+
+
+    # gradient stuff
+
+
+
+        def g1():
+            temp_grad = tf.gradients(img,features)
+            gradient_slice = temp_grad[0][0,:,:,0]
+            sing_vals = tf.linalg.svd(tf.reshape(gradient_slice,[160,128]),compute_uv = False)
+            return 0
+
+        #gradient_reshaped = tf.reshape(gradient_slice,[1,160,128,1])
+        #print("GRADIENT RESHAPED",gradient_reshaped)
+        #tf.summary.image("gradient_output_wrt_input",gradient_reshaped)
+
+        #gradient_reshaped = tf.reshape(gradient_reshaped,[160,128])
+
+        #frequency = tf.fft2d(tf.cast(gradient_reshaped,tf.complex64))
+
+        #split0, split1 = tf.split(frequency,[80,80],0)
+        #frequency = tf.concat([split1, split0],0)
+        #split0, split1 = tf.split(frequency,[64,64],1)
+        #frequency = tf.concat([split1,split0],1)
+
+        #frequency = tf.log(tf.abs(frequency) + 1e-10)
+        #frequency = tf.reshape(frequency,[1,160,128,1])
+
+        #print("FFT of gradient", frequency)
+        #tf.summary.image("FFT_of_gradient",frequency)
+
+
+        #sing_vals = s
+
+        
+
+        #s = tf.div(tf.subtract(s, tf.reduce_min(s)),tf.subtract(tf.reduce_max(s),tf.reduce_min(s)))
+        #s = tf.diag(s)
+        #s = tf.reshape(s,[1,128,128,1])
+        #tf.summary.image("Singular Values",s)
+        #return 0
+
+        def g2():
+            return 1
+       #     return 1
+            ### Do Nothing
+
+        abcd = tf.cond(print_bool,g1,g2)
+
+
         #size = (b_size,160,128,2)
+
+
+
 
 
     ### Data consistency
     #img = tf.image.resize_images(img,[320,256])
 
     def l1():
-        #return img
+        return img
         masks_comp = 1.0 - masks
         correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
         correct_image = upsample(correct_kspace, masks)
         return correct_image
 
     def l2():
-        #return img
+        return img
         masks_comp = 1.0 - masks
         correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
         correct_image = upsample(correct_kspace, masks)
         return correct_image
+        
     
     output = tf.cond(train_phase,l1,l2)
+
+
     output_layers = [output]
 
     new_vars = tf.global_variables()
     gen_vars = list(set(new_vars) - set(old_vars))
 
-    return output, gen_vars, output_layers, mn, sd
+    print("Output shape", output.shape)
+    print("Output type", type(output))
+
+    return output, gen_vars, output_layers, mn, sd, sing_vals
 
 
 def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channels = 2, layer_output_skip=5):
@@ -1192,6 +1269,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     label_minput = tf.placeholder_with_default(tf.zeros([FLAGS.batch_size, rows, cols, channels]), shape=[FLAGS.batch_size, rows, cols, channels])
     train_phase = tf.placeholder_with_default(True, shape=())
     z_val = tf.placeholder_with_default(temp_zeros, shape= temp_zeros.shape)
+    print_bool = tf.placeholder_with_default(False, shape=())
 
     features = gene_minput
 
@@ -1202,7 +1280,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     if architecture == 'aec':
         function_generator = lambda x,y,z,w,t: _generator_encoder_decoder(x,y,z,w,t)
     elif architecture == 'vae':
-        function_generator = lambda x,y,z,w,t,a: variational_autoencoder(x,y,z,w,t,a)
+        function_generator = lambda x,y,z,w,t,a,p: variational_autoencoder(x,y,z,w,t,a,p)
     elif architecture == 'pool':
         function_generator = lambda x,y,z,w: _generator_model_with_pool(x,y,z,w)
     elif architecture.startswith('var'):
@@ -1240,7 +1318,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         for i in range(FLAGS.num_iteration):
 
              #train
-             gene_output, gene_var_list, gene_layers, mn, sd = function_generator(sess, gene_output, labels, masks,train_phase,z_val)
+             gene_output, gene_var_list, gene_layers, mn, sd, sing_vals = function_generator(sess, gene_output, labels, masks,train_phase,z_val,print_bool)
              #gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks,train_phase)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
@@ -1251,7 +1329,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
              scope.reuse_variables()
              
              #test
-             gene_moutput, _ , gene_mlayers, mn1, sd1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val)
+             gene_moutput, _ , gene_mlayers, mn1, sd1, sing_vals1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val,print_bool)
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
@@ -1259,7 +1337,9 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val)
+             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2, sing_vals2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val,print_bool)
+
+
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              #mask_list_0 = gene_mlayers_0[3]
              """
@@ -1275,6 +1355,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
              #kappa.append(kappa_t)
              #nmse.append(nmse_t)
              """
+
 
     #eta = tf.zeros([4,4]) #eta_1 + eta_2
                     
@@ -1301,9 +1382,12 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
             
         disc_fake_output, _, _ = _discriminator_model(sess, features, gene_output_real, hybrid_disc=FLAGS.hybrid_disc)
 
-    return [mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
+
+
+
+    return [sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
             gene_output, gene_output_list, gene_Var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
-            disc_real_output, disc_fake_output, disc_var_list, train_phase,z_val,disc_layers, eta, nmse, kappa]   
+            disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool, z_val,disc_layers, eta, nmse, kappa]   
 
 
 # SSIM
@@ -1456,8 +1540,10 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
                             (1.0 - FLAGS.gene_ssim_factor) * gene_mse_loss, name='gene_mixmse_loss')
     
     # generator fool descriminator loss: gan LS or log loss
-    gene_fool_loss = tf.add(FLAGS.gene_ls_factor * gene_ls_loss,
-                           FLAGS.gene_log_factor * gene_ce_loss, name='gene_fool_loss')
+    #gene_fool_loss = tf.add(FLAGS.gene_ls_factor * gene_ls_loss,
+        #                   FLAGS.gene_log_factor * gene_ce_loss, name='gene_fool_loss')
+
+    gene_fool_loss = -tf.reduce_mean(disc_output)
 
     # non-mse loss = fool-loss + data consisntency loss
     gene_non_mse_l2     = gene_fool_loss  #tf.add((1.0 - FLAGS.gene_dc_factor) * gene_fool_loss,
@@ -1484,6 +1570,57 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
                         gene_dc_loss, gene_fool_loss, gene_non_mse_l2, gene_loss]
 
 
+
+
+    #GRadient stuff
+    #print("Input size", features.shape)
+    #print("Output size", gene_output.shape)
+    #gradient = tf.gradients(gene_output,features)
+    #print("GRADIENT",gradient)
+
+    #gradient_slice = gradient[0][:,:,:,0]
+    #gradient_reshaped = tf.reshape(gradient_slice,[1,160,128,1])
+    #gradient_reshaped = gradient_reshaped /(tf.norm(gradient_reshaped) + 1e-12)
+    #print("GRADIENT RESHAPED",gradient_reshaped)
+    #tf.summary.image("gradient",gradient_reshaped)
+    #features_viz = features[:,:,:,0]
+    #features_viz = tf.reshape(features_viz,[1,160,128,1])
+    #tf.summary.image("features",features_viz)
+
+    #features_viz = tf.reshape(features_viz,[160,128])
+
+    #frequency = tf.fft2d(tf.cast(features_viz,tf.complex64))
+
+    #split0, split1 = tf.split(frequency,[80,80],0)
+    #frequency = tf.concat([split1, split0],0)
+
+    #split0, split1 = tf.split(frequency,[64,64],1)
+    #frequency = tf.concat([split1,split0],1)
+
+    #frequency = tf.log(tf.abs(frequency) + 1e-10) 
+    #frequency = tf.reshape(frequency,[1,160,128,1])
+    #print("FFT of input", frequency)
+    #tf.summary.image("FFT_of_input",frequency)
+
+    #output_viz = gene_output[:,:,:,0]
+    #output_viz = tf.reshape(output_viz,[1,160,128,1])
+    #tf.summary.image("output",output_viz)
+
+    #output_viz = tf.reshape(output_viz,[160,128])
+
+    #frequency = tf.fft2d(tf.cast(output_viz,tf.complex64))
+
+    #split0, split1 = tf.split(frequency,[80,80],0)
+    #frequency = tf.concat([split1, split0],0)
+
+    #split0, split1 = tf.split(frequency,[64,64],1)
+    #frequency = tf.concat([split1,split0],1)
+
+    #frequency = tf.log(tf.abs(frequency) + 1e-10) 
+    #frequency = tf.reshape(frequency,[1,160,128,1])
+    #print("FFT of output", frequency)
+    #tf.summary.image("FFT_of_output",frequency)
+
     # log to tensorboard
     #tf.summary.scalar('gene_non_mse_loss', gene_non_mse_l2)
     tf.summary.scalar('gene_fool_loss', gene_non_mse_l2)
@@ -1495,15 +1632,7 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
     return gene_loss, gene_dc_loss, gene_fool_loss, gene_mse_loss, list_gene_lose, gene_mse_factor
     
 
-def create_discriminator_loss(disc_real_output, disc_fake_output):
-    # I.e. did we correctly identify the input as real or not?
-    # cross_entropy_real = tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_real_output, labels=tf.ones_like(disc_real_output))
-    # disc_real_loss     = tf.reduce_mean(cross_entropy_real, name='disc_real_loss')
-    
-    # cross_entropy_fake = tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_fake_output, labels=tf.zeros_like(disc_fake_output))
-    # disc_fake_loss     = tf.reduce_mean(cross_entropy_fake, name='disc_fake_loss')
-
-    # ls loss
+def create_discriminator_loss(disc_real_output, disc_fake_output, real_data = None, fake_data = None):
     ls_loss_real = tf.square(disc_real_output - tf.ones_like(disc_real_output))
     disc_real_loss = tf.reduce_mean(ls_loss_real, name='disc_real_loss')
 
@@ -1513,9 +1642,59 @@ def create_discriminator_loss(disc_real_output, disc_fake_output):
         # log to tensorboard
     tf.summary.scalar('disc_real_loss',disc_real_loss)
     tf.summary.scalar('disc_fake_loss',disc_fake_loss)
-
-
     return disc_real_loss, disc_fake_loss
+    
+    # I.e. did we correctly identify the input as real or not?
+    # cross_entropy_real = tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_real_output, labels=tf.ones_like(disc_real_output))
+    # disc_real_loss     = tf.reduce_mean(cross_entropy_real, name='disc_real_loss')
+    
+    # cross_entropy_fake = tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_fake_output, labels=tf.zeros_like(disc_fake_output))
+    # disc_fake_loss     = tf.reduce_mean(cross_entropy_fake, name='disc_fake_loss')
+"""
+    fake_data = tf.complex(fake_data[:,:,:,0], fake_data[:,:,:,1])
+    fake_data = tf.abs(fake_data)
+    fake_data = tf.reshape(fake_data, [FLAGS.batch_size, rows, cols, 1])   
+
+    real_data = tf.complex(real_data[:,:,:,0], real_data[:,:,:,1])
+    real_data = tf.abs(real_data)
+    real_data = tf.reshape(real_data, [FLAGS.batch_size, rows, cols, 1]) 
+
+    disc_real_loss = tf.reduce_mean(disc_real_output)
+    disc_fake_loss = tf.reduce_mean(disc_fake_output)
+
+    disc_cost = disc_fake_loss - disc_real_loss
+
+    # generate noisy inputs 
+    alpha = tf.random_uniform(shape=[FLAGS.batch_size, 1, 1, 1], minval=0.,maxval=1.)    
+    interpolates = real_data + (alpha*(fake_data - real_data))
+
+    with tf.variable_scope('disc', reuse=True) as scope:
+
+        interpolates_disc_output, _, _ = _discriminator_model(None, None, interpolates, hybrid_disc=FLAGS.hybrid_disc)
+        gradients = tf.gradients(interpolates_disc_output, [interpolates])[0] 
+        gradients = tf.layers.flatten(gradients)
+
+    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))  
+    gradient_penalty = tf.reduce_mean((slopes - 1.)**2)
+    disc_loss = tf.add(disc_cost, 1 * gradient_penalty, name='disc_loss')
+        
+    tf.summary.scalar('disc_total_loss',disc_loss)
+    tf.summary.scalar('disc_real_loss',disc_real_loss) 
+    tf.summary.scalar('disc_fake_loss',disc_fake_loss) 
+
+    return disc_loss, disc_real_loss, disc_fake_loss, gradient_penalty
+"""
+
+
+
+
+
+    # ls loss
+
+
+    
+
+    
 
 def create_optimizers(gene_loss, gene_var_list,
                       disc_loss, disc_var_list):    

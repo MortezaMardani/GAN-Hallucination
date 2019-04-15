@@ -113,18 +113,28 @@ def convert_to_image(gene_output,td):
     return image
 
 def generate_many(td,feature,lab):
+
     num_to_generate = 500
-    count = 1
+    count = 0
     ims = []
     for i in range(num_to_generate):
         feed_dict = {td.gene_minput: feature,td.label_minput: lab,td.train_phase: True}
         ops = [td.gene_moutput]
         gene_moutput = td.sess.run(ops, feed_dict=feed_dict)
-        ims.append(gene_moutput[0][0,:,:,0])
+        print("TESTING SHAPES")
+        print(gene_moutput[0].shape)
+        ims.append(gene_moutput[0][2,:,:,0])
         gene_moutput = gene_moutput
         image = convert_to_image(gene_moutput,td)
+        print(image.shape)
 
-        
+
+        out = gene_moutput[0][0,:,:,0]
+        inp = feature[0,:,:,0]
+
+        grad = tf.gradients(out,inp)
+        print("Gradient",grad)
+
         print('save to image,', image.shape)
         filename = 'image%d.png' % (count)
         filename = os.path.join("gen_images", filename)
@@ -138,11 +148,38 @@ def generate_many(td,feature,lab):
 
     pixel_mean = np.mean(np.array(ims), axis=0)
     pixel_var = np.var(np.array(ims),axis = 0)
-    filename = 'new_mask_mean_2.5.out'
+    filename = '4_iter_5_gan_image_mean.out'
     np.save(filename,pixel_mean)
 
-    filename = 'new_mask_var_2.5.out'
+    filename = '4_iter_5_gan_image_var.out'
     np.save(filename,pixel_var)
+
+    filename = '4_iter_5_gan_ground_truth_image.out'
+    np.save(filename,lab)
+
+    cov_mat = 0
+
+    for i in range(len(ims)):
+        cov_mat += np.matmul((ims[i] - pixel_mean),np.transpose(ims[i] - pixel_mean))
+
+    cov_mat = cov_mat / len(ims)
+
+    cov_mat_2 = 0
+
+    for i in range(len(ims)):
+        first = np.reshape((ims[i] - pixel_mean),(-1,1))
+        second = np.transpose(first)
+        cov_mat_2 += np.matmul(first,second)
+
+    cov_mat_2 = cov_mat_2 / len(ims)
+
+
+
+    filename = '4_iter_cov_matrix_1_5_gan.out'
+    np.save(filename,cov_mat)
+
+    filename = '4_iter_cov_matrix_2_5_gan.out'
+    np.save(filename,cov_mat_2)
 
 
 
@@ -264,7 +301,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     list_train_features = []
     list_train_labels = []
     for batch_test in range(int(num_batch_train)):
-        train_feature, train_label = td.sess.run([td.test_features, td.test_labels])  #switch as needed
+        train_feature, train_label = td.sess.run([td.train_features, td.train_labels])  #switch as needed
         list_train_features.append(train_feature)
         list_train_labels.append(train_label)
     lab = train_label[0]
@@ -296,6 +333,8 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     np.save("gt.out",list_train_labels[302])
     print("    Saved  input and gt")
 
+    sing_vals_arr = np.zeros((128,1))
+
     while not done:
         batch += 1
         gene_ls_loss = gene_dc_loss = gene_loss = gene_mse_loss = disc_real_loss = disc_fake_loss = -1.234
@@ -303,10 +342,10 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
 
         #first train based on MSE and then GAN
-        if batch < 0:
-           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1,td.train_phase: True}
+        if batch < 1e3:
+           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1,td.train_phase: True, td.print_bool: True}
         else:
-           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 0.95, td.train_phase: True}  #1/np.sqrt(batch+100-1e3) + 0.9}
+           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1/np.sqrt(batch+400-1e3) + 0.95, td.train_phase: True, td.print_bool: True}  #1/np.sqrt(batch+100-1e3) + 0.9}
         #feed_dict = {td.learning_rate : lrval}
         
         # for training 
@@ -315,10 +354,14 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         # ops = [td.gene_minimize, td.disc_minimize, td.gene_loss, td.disc_real_loss, td.disc_fake_loss, 
         #        td.train_features, td.train_labels, td.gene_output]#, td.gene_var_list, td.gene_layers]
         # _, _, gene_loss, disc_real_loss, disc_fake_loss, train_feature, train_label, train_output = td.sess.run(ops, feed_dict=feed_dict)
-        ops = [td.gene_minimize, td.disc_minimize, summary_op, td.gene_loss, td.gene_mse_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, td.list_gene_losses]                   
-        _, _, fet_sum, gene_loss, gene_mse_loss, gene_ls_loss, gene_dc_loss, disc_real_loss, disc_fake_loss, list_gene_losses = td.sess.run(ops, feed_dict=feed_dict)
+        ops = [td.gene_minimize, td.disc_minimize, summary_op, td.mn, td.sing_vals, td.gene_loss, td.gene_mse_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, td.list_gene_losses]                   
+        _, _, fet_sum, mn, sing_vals, gene_loss, gene_mse_loss, gene_ls_loss, gene_dc_loss, disc_real_loss, disc_fake_loss, list_gene_losses = td.sess.run(ops, feed_dict=feed_dict)
         
         sum_writer.add_summary(fet_sum,batch)
+        
+        #print(mn)
+        if batch == 1:
+            sing_vals_arr = np.reshape(sing_vals, (128,1))
 
 
         # get all losses
@@ -326,6 +369,8 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     
         # verbose training progress
         if batch % 100 == 0:
+            temp = np.reshape(sing_vals, (128,1))
+            sing_vals_arr = np.hstack((sing_vals_arr,temp))
             # Show we are alive
             elapsed = int(time.time() - start_time)/60
             err_log = 'Progress[{0:3f}%], ETA[{1:4f}m], Batch [{2:4f}], G_MSE_Loss[{3}], G_DC_Loss[{4:5f}], G_LS_Loss[{5:3.3f}], D_Real_Loss[{6:3.3f}], D_Fake_Loss[{7:3.3f}]'.format(
@@ -345,7 +390,6 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
             if batch % FLAGS.learning_rate_half_life == 0:
                 lrval *= .5
         # export test batches
-
 
 
 
@@ -397,6 +441,9 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         if batch % FLAGS.checkpoint_period == 0:
             # Save checkpoint
             _save_checkpoint(td, batch)
+
+    filename = "sing_vals_4_iter_gan_5.out"
+    np.save(filename,sing_vals_arr)
 
     #_save_checkpoint(td, batch)
     print('Finished training!')
