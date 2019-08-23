@@ -116,70 +116,91 @@ def generate_many(td,feature,lab):
 
     num_to_generate = 500
     count = 0
-    ims = []
-    for i in range(num_to_generate):
+    ims1 = []
+    ims2 = []
+    ims3 = []
+    ims4 = []
+   # ims = []
+
+    for k in range(num_to_generate):
         feed_dict = {td.gene_minput: feature,td.label_minput: lab,td.train_phase: True}
-        ops = [td.gene_moutput]
-        gene_moutput = td.sess.run(ops, feed_dict=feed_dict)
-        print("TESTING SHAPES")
-        print(gene_moutput[0].shape)
-        ims.append(gene_moutput[0][2,:,:,0])
-        gene_moutput = gene_moutput
-        image = convert_to_image(gene_moutput,td)
-        print(image.shape)
+        ops = [td.gene_moutput_list]
+        gene_moutput_list = td.sess.run(ops, feed_dict=feed_dict)
+        gene_moutput = gene_moutput_list[-1]
+
+        gene_moutput_list = gene_moutput_list[0]
+
+        for i in range(len(gene_moutput_list)):
+            arr = gene_moutput_list[i]
+            if i == 0:
+                ims1.append(arr[2,:,:,0])
+            if i == 1:
+                ims2.append(arr[2,:,:,0])
+            if i == 2:
+                ims3.append(arr[2,:,:,0])
+            if i == 3:
+                ims4.append(arr[2,:,:,0])
+       # print("TESTING SHAPES")
+       # print(gene_moutput[0].shape)
+       # ims.append(gene_moutput[0][2,:,:,0])
+       # gene_moutput = gene_moutput
+       # image = convert_to_image(gene_moutput,td)
+       # print(image.shape)
 
 
-        out = gene_moutput[0][0,:,:,0]
-        inp = feature[0,:,:,0]
+       # out = gene_moutput[0][0,:,:,0]
+       # inp = feature[0,:,:,0]
 
-        grad = tf.gradients(out,inp)
-        print("Gradient",grad)
+      #  grad = tf.gradients(out,inp)
+      #  print("Gradient",grad)
 
-        print('save to image,', image.shape)
-        filename = 'image%d.png' % (count)
-        filename = os.path.join("gen_images", filename)
-        scipy.misc.toimage(image, cmin=0., cmax=1.).save(filename)
-        print("    Saved %s" % (filename,))
+       # print('save to image,', image.shape)
+       # filename = 'image%d.png' % (count)
+       # filename = os.path.join("gen_images", filename)
+       # scipy.misc.toimage(image, cmin=0., cmax=1.).save(filename)
+      #  print("    Saved %s" % (filename,))
 
-        if count == 15 or count == 38 or count == 69:
-            filename = 'gen_example%d.out' % count
-            np.save(filename,gene_moutput)
-        count += 1
+       # if count == 15 or count == 38 or count == 69:
+       #     filename = 'gen_example%d.out' % count
+       #     np.save(filename,gene_moutput)
+       # count += 1
 
-    pixel_mean = np.mean(np.array(ims), axis=0)
-    pixel_var = np.var(np.array(ims),axis = 0)
-    filename = '4_iter_5_gan_image_mean.out'
+    pixel_mean = np.mean(np.array(ims1), axis=0)
+    #pixel_var = np.var(np.array(ims),axis = 0)
+    filename = 'all_iters_10_gan_1_iter.out'
     np.save(filename,pixel_mean)
 
-    filename = '4_iter_5_gan_image_var.out'
-    np.save(filename,pixel_var)
+    pixel_mean = np.mean(np.array(ims2), axis=0)
+    #pixel_var = np.var(np.array(ims),axis = 0)
+    filename = 'all_iters_10_gan_2_iter.out'
+    np.save(filename,pixel_mean)
 
-    filename = '4_iter_5_gan_ground_truth_image.out'
+    pixel_mean = np.mean(np.array(ims3), axis=0)
+    #pixel_var = np.var(np.array(ims),axis = 0)
+    filename = 'all_iters_10_gan_3_iter.out'
+    np.save(filename,pixel_mean)
+
+    pixel_mean = np.mean(np.array(ims4), axis=0)
+    #pixel_var = np.var(np.array(ims),axis = 0)
+    filename = 'all_iters_10_gan_4_iter.out'
+    np.save(filename,pixel_mean)
+
+   # filename = 'n_1_iter_5_gan_image_var.out'
+    #np.save(filename,pixel_var)
+
+    filename = 'all_iters_10_gan_gt.out'
     np.save(filename,lab)
 
     cov_mat = 0
 
-    for i in range(len(ims)):
-        cov_mat += np.matmul((ims[i] - pixel_mean),np.transpose(ims[i] - pixel_mean))
+    for i in range(len(ims4)):
+        cov_mat += np.matmul((ims4[i] - pixel_mean),np.transpose(ims4[i] - pixel_mean))
 
-    cov_mat = cov_mat / len(ims)
+    cov_mat = cov_mat / len(ims4)
 
-    cov_mat_2 = 0
-
-    for i in range(len(ims)):
-        first = np.reshape((ims[i] - pixel_mean),(-1,1))
-        second = np.transpose(first)
-        cov_mat_2 += np.matmul(first,second)
-
-    cov_mat_2 = cov_mat_2 / len(ims)
-
-
-
-    filename = '4_iter_cov_matrix_1_5_gan.out'
+    filename = 'all_iters_10_gan_cov.out'
     np.save(filename,cov_mat)
 
-    filename = '4_iter_cov_matrix_2_5_gan.out'
-    np.save(filename,cov_mat_2)
 
 
 
@@ -333,7 +354,8 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     np.save("gt.out",list_train_labels[302])
     print("    Saved  input and gt")
 
-    sing_vals_arr = np.zeros((128,1))
+    sing_vals_arr = []
+    RSS_arr = []
 
     while not done:
         batch += 1
@@ -342,10 +364,10 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
 
         #first train based on MSE and then GAN
-        if batch < 1e3:
+        if batch < 1e10:
            feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1,td.train_phase: True, td.print_bool: True}
         else:
-           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1/np.sqrt(batch+400-1e3) + 0.95, td.train_phase: True, td.print_bool: True}  #1/np.sqrt(batch+100-1e3) + 0.9}
+           feed_dict = {td.learning_rate : lrval, td.gene_mse_factor : 1/np.sqrt(batch+100-1e3) + 0.9, td.train_phase: True, td.print_bool: True}  #1/np.sqrt(batch+100-1e3) + 0.9}
         #feed_dict = {td.learning_rate : lrval}
         
         # for training 
@@ -354,14 +376,14 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         # ops = [td.gene_minimize, td.disc_minimize, td.gene_loss, td.disc_real_loss, td.disc_fake_loss, 
         #        td.train_features, td.train_labels, td.gene_output]#, td.gene_var_list, td.gene_layers]
         # _, _, gene_loss, disc_real_loss, disc_fake_loss, train_feature, train_label, train_output = td.sess.run(ops, feed_dict=feed_dict)
-        ops = [td.gene_minimize, td.disc_minimize, summary_op, td.mn, td.sing_vals, td.gene_loss, td.gene_mse_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, td.list_gene_losses]                   
-        _, _, fet_sum, mn, sing_vals, gene_loss, gene_mse_loss, gene_ls_loss, gene_dc_loss, disc_real_loss, disc_fake_loss, list_gene_losses = td.sess.run(ops, feed_dict=feed_dict)
+        ops = [td.gene_minimize, td.disc_minimize, summary_op, td.mn, td.RSS, td.sing_vals, td.gene_loss, td.gene_mse_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, td.list_gene_losses]                   
+        _, _, fet_sum, mn, RSS, sing_vals, gene_loss, gene_mse_loss, gene_ls_loss, gene_dc_loss, disc_real_loss, disc_fake_loss, list_gene_losses = td.sess.run(ops, feed_dict=feed_dict)
         
         sum_writer.add_summary(fet_sum,batch)
         
         #print(mn)
         if batch == 1:
-            sing_vals_arr = np.reshape(sing_vals, (128,1))
+            sing_vals_arr.append(np.reshape(sing_vals, (64,1)))
 
 
         # get all losses
@@ -369,8 +391,9 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
     
         # verbose training progress
         if batch % 100 == 0:
-            temp = np.reshape(sing_vals, (128,1))
-            sing_vals_arr = np.hstack((sing_vals_arr,temp))
+            temp = np.reshape(sing_vals, (64,1))
+            sing_vals_arr.append(temp)
+            RSS_arr.append(RSS)
             # Show we are alive
             elapsed = int(time.time() - start_time)/60
             err_log = 'Progress[{0:3f}%], ETA[{1:4f}m], Batch [{2:4f}], G_MSE_Loss[{3}], G_DC_Loss[{4:5f}], G_LS_Loss[{5:3.3f}], D_Real_Loss[{6:3.3f}], D_Fake_Loss[{7:3.3f}]'.format(
@@ -442,15 +465,18 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
             # Save checkpoint
             _save_checkpoint(td, batch)
 
-    filename = "sing_vals_4_iter_gan_5.out"
+    filename = "sing_vals.out"
     np.save(filename,sing_vals_arr)
+
+    filename = "rss_vals.out"
+    np.save(filename,RSS_arr)
 
     #_save_checkpoint(td, batch)
     print('Finished training!')
 
     lab = list_train_labels[327]
     feat = list_train_features[327]
-    generate_many(td,feat,lab)
+    #generate_many(td,feat,lab)
 
 """
     input_img = convert_to_image(feat,td)

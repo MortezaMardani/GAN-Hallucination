@@ -445,6 +445,8 @@ def _train():
     print(len(test_filenames_input))
     print(len(test_filenames_output))
 
+    mask = None
+
     # Setup async input queues
     train_features, train_labels, train_masks = srez_input.setup_inputs_one_sources(sess, train_filenames_input, train_filenames_output, 
                                                                         image_size=image_size, 
@@ -483,7 +485,7 @@ def _train():
                            tf.random_normal(train_features.get_shape(), stddev=noise_level)
 
     # Create and initialize model
-    [sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
+    [RSS,sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
      disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool,z_val,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
