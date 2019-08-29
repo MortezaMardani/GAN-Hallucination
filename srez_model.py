@@ -726,6 +726,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
 
     sing_vals = tf.zeros([64,1])
     RSS = 0
+    MSE = 0
  
 
     #features = tf.image.resize_images(features,[160,128])
@@ -736,7 +737,11 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
     encoder_layers = []
 
     with tf.variable_scope("var_encoder"):
-        x1 = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
+
+        x0 = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
+        encoder_layers.append(x0)
+
+        x1 = tf.layers.conv2d(x0,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
       #  x1 = tf.contrib.layers.batch_norm(x1,activation_fn = activation)
       #  x1 = tf.nn.dropout(x1, keep_prob)
         encoder_layers.append(x1)
@@ -815,6 +820,11 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
         x = tf.add(x,x1)
         #size = (b_size,80,64,128)
 
+        x = tf.layers.conv2d_transpose(x, filters=num_filters, kernel_size=5, strides=2, padding='same')
+       # x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        x = tf.add(x,x0)
+        #size = (b_size,80,64,128)
+
 
         x = tf.layers.conv2d_transpose(x, filters=channels, kernel_size=5, strides=2, padding='same',activation = tf.nn.sigmoid)
         img = x
@@ -844,12 +854,13 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
             #gradient_slice = temp_grad[0][0,:,:,0]
 
 
-            sing_vals = tf.linalg.svd(tf.reshape(gradient_slice,[80,64]),compute_uv = False)
+            sing_vals = tf.linalg.svd(tf.reshape(gradient_slice,[160,128]),compute_uv = False)
             #sing_vals = tf.zeros([64,1])
 
             RSS = tf.cast(tf.reduce_mean(tf.square(tf.abs(img - features))), tf.float32)
+            MSE = tf.cast(tf.reduce_mean(tf.square(tf.abs(img - labels))), tf.float32)
             
-            return sing_vals, RSS
+            return sing_vals, RSS, MSE
 
         #gradient_reshaped = tf.reshape(gradient_slice,[1,160,128,1])
         #print("GRADIENT RESHAPED",gradient_reshaped)
@@ -882,11 +893,11 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
         #return 0
 
         def g2():
-            return tf.ones([64,1]), 0.0
+            return tf.ones([128,1]), 0.0, 0.0
        #     return 1
             ### Do Nothing
 
-        sing_vals, RSS = tf.cond(print_bool,g1,g2)
+        sing_vals, RSS, MSE = tf.cond(print_bool,g1,g2)
 
 
         #size = (b_size,160,128,2)
@@ -924,7 +935,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
     print("Output shape", output.shape)
     print("Output type", type(output))
 
-    return output, gen_vars, output_layers, mn, sd, sing_vals, RSS
+    return output, gen_vars, output_layers, mn, sd, sing_vals, RSS, MSE
 
 
 def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channels = 2, layer_output_skip=5):
@@ -1374,7 +1385,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         for i in range(FLAGS.num_iteration):
 
              #train
-             gene_output, gene_var_list, gene_layers, mn, sd, sing_vals, RSS = function_generator(sess, gene_output, labels, masks,train_phase,z_val,print_bool)
+             gene_output, gene_var_list, gene_layers, mn, sd, sing_vals, RSS, MSE = function_generator(sess, gene_output, labels, masks,train_phase,z_val,print_bool)
              #gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks,train_phase)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
@@ -1385,7 +1396,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
              scope.reuse_variables()
              
              #test
-             gene_moutput, _ , gene_mlayers, mn1, sd1, sing_vals1, RSS1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val,print_bool)
+             gene_moutput, _ , gene_mlayers, mn1, sd1, sing_vals1, RSS1, MSE1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val,print_bool)
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
@@ -1393,7 +1404,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2, sing_vals2, RSS2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val,print_bool)
+             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2, sing_vals2, RSS2, MSE2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val,print_bool)
 
 
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
@@ -1441,7 +1452,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
 
 
-    return [RSS, sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
+    return [MSE, RSS, sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
             gene_output, gene_output_list, gene_Var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
             disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool, z_val,disc_layers, eta, nmse, kappa]   
 

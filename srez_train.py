@@ -356,6 +356,7 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
     sing_vals_arr = []
     RSS_arr = []
+    MSE_arr = []
 
     while not done:
         batch += 1
@@ -376,24 +377,27 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
         # ops = [td.gene_minimize, td.disc_minimize, td.gene_loss, td.disc_real_loss, td.disc_fake_loss, 
         #        td.train_features, td.train_labels, td.gene_output]#, td.gene_var_list, td.gene_layers]
         # _, _, gene_loss, disc_real_loss, disc_fake_loss, train_feature, train_label, train_output = td.sess.run(ops, feed_dict=feed_dict)
-        ops = [td.gene_minimize, td.disc_minimize, summary_op, td.mn, td.RSS, td.sing_vals, td.gene_loss, td.gene_mse_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, td.list_gene_losses]                   
-        _, _, fet_sum, mn, RSS, sing_vals, gene_loss, gene_mse_loss, gene_ls_loss, gene_dc_loss, disc_real_loss, disc_fake_loss, list_gene_losses = td.sess.run(ops, feed_dict=feed_dict)
+        ops = [td.gene_minimize, td.disc_minimize, summary_op, td.mn, td.MSE, td.RSS, td.sing_vals, td.gene_loss, td.gene_mse_loss, td.gene_ls_loss, td.gene_dc_loss, td.disc_real_loss, td.disc_fake_loss, td.list_gene_losses]                   
+        _, _, fet_sum, mn, MSE, RSS, sing_vals, gene_loss, gene_mse_loss, gene_ls_loss, gene_dc_loss, disc_real_loss, disc_fake_loss, list_gene_losses = td.sess.run(ops, feed_dict=feed_dict)
         
         sum_writer.add_summary(fet_sum,batch)
         
         #print(mn)
         if batch == 1:
-            sing_vals_arr.append(np.reshape(sing_vals, (64,1)))
+            sing_vals_arr.append(np.reshape(sing_vals, (128,1)))
 
 
         # get all losses
         list_gene_losses = [float(x) for x in list_gene_losses]
+
+        if batch % 9 == 0:
+            temp = np.reshape(sing_vals, (128,1))
+            sing_vals_arr.append(temp)
+            RSS_arr.append(RSS)
+            MSE_arr.append(MSE)
     
         # verbose training progress
         if batch % 100 == 0:
-            temp = np.reshape(sing_vals, (64,1))
-            sing_vals_arr.append(temp)
-            RSS_arr.append(RSS)
             # Show we are alive
             elapsed = int(time.time() - start_time)/60
             err_log = 'Progress[{0:3f}%], ETA[{1:4f}m], Batch [{2:4f}], G_MSE_Loss[{3}], G_DC_Loss[{4:5f}], G_LS_Loss[{5:3.3f}], D_Real_Loss[{6:3.3f}], D_Fake_Loss[{7:3.3f}]'.format(
@@ -470,6 +474,9 @@ def train_model(sess,train_data, num_sample_train=1984, num_sample_test=116):
 
     filename = "rss_vals.out"
     np.save(filename,RSS_arr)
+
+    filename = "mse_vals.out"
+    np.save(filename,MSE_arr)
 
     #_save_checkpoint(td, batch)
     print('Finished training!')

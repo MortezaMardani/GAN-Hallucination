@@ -485,7 +485,7 @@ def _train():
                            tf.random_normal(train_features.get_shape(), stddev=noise_level)
 
     # Create and initialize model
-    [RSS,sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
+    [MSE, RSS,sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
      disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool,z_val,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
