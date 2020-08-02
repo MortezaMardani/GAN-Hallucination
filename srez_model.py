@@ -1,8 +1,57 @@
+# File to define all models used
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops.parallel_for import gradients
+from tensorflow.python.ops.parallel_for import control_flow_ops
+from tensorflow.python.ops import gradients as gradient_ops
+from tensorflow.python.util import nest
+from tensorflow.python.ops import array_ops
 
 FLAGS = tf.app.flags.FLAGS
+
+
+#function for computing Jacobian (in practice, approximation is needed for computational efficiency)
+def tr_jacobian(output_tensor, input_tensor):
+
+    flat_inputs = input_tensor  #nest.flatten(input_tensor)
+    print('flat_inputs', flat_inputs)
+    #output_tensor_shape = output.shape
+    #output_shape = array_ops.shape(output)
+    output = array_ops.reshape(output_tensor, [-1])
+
+    output_size = 100  #FLAGS.batch_size*FLAGS.sample_size*FLAGS.sample_size_y*2
+    tr = tf.constant(0.0)
+    for i in range(output_size):
+
+        y = array_ops.gather(output, i)
+        grad = gradient_ops.gradients(y,flat_inputs)[0]
+        grad_vec = tf.reshape(grad, [-1])
+        #print('grad_vec', grad_vec)
+        tr = tr + grad_vec[i]
+
+    return tr
+
+#parallelized version of Jacobian computation (still highly inefficient)
+def parallel_tr_jacobian(output_tensor, input_tensor):
+
+    flat_inputs = input_tensor  #nest.flatten(input_tensor)
+    print('flat_inputs', flat_inputs)
+    #output_tensor_shape = output.shape
+    #output_shape = array_ops.shape(output)
+    output = array_ops.reshape(output_tensor, [-1])
+    tr = tf.constant(0.0)
+    i = tf.constant(0)
+    c = lambda i: tf.less(i,100)
+    def b():
+        y = array_ops.gather(output, i)
+        grad = gradient_ops.gradients(y,flat_inputs)[0]
+        grad_vec = tf.reshape(grad, [-1])
+        tr = tr + grad_vec[i]
+
+    tr = tf.while_loop(c,b,[tr])
+    return tr
+
 
 def complex_add(x, y):
     xr, xi = tf.real(x), tf.imag(x)
@@ -23,51 +72,6 @@ def stack_k(x, axis, k):
     out = tf.stack(list_x, axis)
 
     return out
-
-'''
-##coil_sens = m x n x 2 x C
-##x = batch_size x m x n x 2
-
-#Downsampling with coil sensitivities
-def downsample(x, mask, coil_sens):
-
-    shape_coil_sens = tf.size(coil_sens)
-    num_coil = shape_coil_sens[3]
-    x = tf.complex(x[:,:,:,0], x[:,:,:,1])
-    mask_kspace = tf.cast(mask, tf.complex64)
-
-    data_kspace = []
-    for c in range(num_coil):
-
-          coil_sens_c_complex = tf.complex(coil_sens[:,:,0,c], coil_sens[:,:,1,c])
-          coil_sens_c_complex_stack = stack_k(coil_sens_c_complex, axis=0, k=FLAGS.batch_size)
-          data_kspace_c = mask_kspace * tf.fft2d(complex_mul(x, coil_sens_c_complex_cat))
-          data_kspace.append(data_kspace_c)
-
-
-    return data_kspace
-
-
-#Upsampling with coil sensitivites
-def upsample(x, mask, coil_sens):
-
-    shape_coil_sens = tf.shape(coil_sens)
-    num_coil = shape_coil_sens[3]
-    image_complex = tf.zeros([FLAGS.batch_size,shape_coil_sens[0],shape_coil_sens[1]])
-
-    for c in range(num_coil):
-
-        data_kspace_c = tf.reshape(data_kspace[:,:,:,c], [FLAGS.batch_size,shape_coil_sens[0],shape_coil_sens[1]])
-        coil_sens_c = coil_sens[c]
-        coil_sens_c_complex = tf.complex(coil_sens_c[:,:,0], coil_sens_c[:,:,1])
-        coil_sens_c_complex_stack = stack_k(coil_sens_c_complex, axis=0, k=FLAGS.batch_size)
-        image_complex_c = tf.conj(coil_sens_c_complex_stack) * tf.ifft2d(data_kspace_c)    #fix the shape for multiplication
-        image_complex = tf.add(image_complex, image_complex_c)
-
-    out = tf.concat([tf.real(image_complex), tf.imag(image_complex)], 3)
-
-    return out
-'''
 
 
 #DOWNSAMPLING
@@ -99,7 +103,6 @@ def upsample(x, mask):
 
 class Model:
     """A neural network model.
-
     Currently only supports a feedforward architecture."""
     
     def __init__(self, name, features):
@@ -117,7 +120,6 @@ class Model:
 
     def _glorot_initializer(self, prev_units, num_units, stddev_factor=1.0):
         """Initialization in the style of Glorot 2010.
-
         stddev_factor should be 1.0 for linear activations, and 2.0 for ReLUs"""
         stddev  = np.sqrt(stddev_factor / np.sqrt(prev_units*num_units))
         return tf.truncated_normal([prev_units, num_units],
@@ -125,7 +127,6 @@ class Model:
 
     def _glorot_initializer_conv2d(self, prev_units, num_units, mapsize, stddev_factor=1.0):
         """Initialization in the style of Glorot 2010.
-
         stddev_factor should be 1.0 for linear activations, and 2.0 for ReLUs"""
 
         stddev  = np.sqrt(stddev_factor / (np.sqrt(prev_units*num_units)*mapsize*mapsize))
@@ -137,7 +138,6 @@ class Model:
 
     def add_batch_norm(self, scale=False):
         """Adds a batch normalization layer to this model.
-
         See ArXiv 1502.03167v3 for details."""
 
         # TBD: This appears to be very flaky, often raising InvalidArgumentError internally
@@ -159,7 +159,6 @@ class Model:
 
     def add_dense(self, num_units, stddev_factor=1.0):
         """Adds a dense linear layer to this model.
-
         Uses Glorot 2010 initialization assuming linear activation."""
         
         assert len(self.get_output().get_shape()) == 2, "Previous layer must be 2-dimensional (batch, channels)"
@@ -410,7 +409,6 @@ class Model:
 
     def add_dense(self, num_units, stddev_factor=1.0):
         """Adds a dense linear layer to this model.
-
         Uses Glorot 2010 initialization assuming linear activation."""
         
         assert len(self.get_output().get_shape()) == 2, "Previous layer must be 2-dimensional (batch, channels)"
@@ -515,7 +513,6 @@ class Model:
 
     def get_variable(self, layer, name):
         """Returns a variable given its layer and name.
-
         The variable must already exist."""
 
         scope      = self._get_layer_str(layer)
@@ -668,7 +665,6 @@ def Fourier(x, separate_complex=True):
 def map(f, x, dtype=None, parallel_iterations=10):
     '''
     Apply f to each of the elements in x using the specified number of parallel iterations.
-
     Important points:
     1. By "elements in x", we mean that we will be applying f to x[0],...x[tf.shape(x)[0]-1].
     2. The output size of f(x[i]) can be arbitrary. However, if the dtype of that output
@@ -703,7 +699,7 @@ def jacobian_func(fx, x, parallel_iterations=10):
                dtype=x.dtype,
                parallel_iterations=parallel_iterations)
 
-
+#VAE implementation
 def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_bool, channels = 2,layer_output_skip = 5):
     print("Use variational autoencoder model")
     old_vars = tf.global_variables()
@@ -719,18 +715,14 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
     mn = 0
     sd = 0
     z = 0
+    x0 = 0
     x1 = 0
     x2 = 0
     x3 = 0
     x4 = 0
 
-    sing_vals = tf.zeros([64,1])
     RSS = 0
     MSE = 0
- 
-
-    #features = tf.image.resize_images(features,[160,128])
-    print(features.shape)   #(b_size,160,128,2)
 
 
     num_filters = 64
@@ -740,45 +732,45 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
 
         x0 = tf.layers.conv2d(features,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
         encoder_layers.append(x0)
+        #size = (b_size,80,64,64)
 
         x1 = tf.layers.conv2d(x0,filters = num_filters,kernel_size = 5,strides = 2,padding = "same")
-      #  x1 = tf.contrib.layers.batch_norm(x1,activation_fn = activation)
-      #  x1 = tf.nn.dropout(x1, keep_prob)
+        print("x1 shape", x1)
+        x1 = tf.contrib.layers.batch_norm(x1,activation_fn = activation)
+        x1 = tf.nn.dropout(x1, keep_prob)
         encoder_layers.append(x1)
-        #size = (b_size,80,64,128)
-
-
+        #size = (b_size,40,32,64)
 
         x2 = tf.layers.conv2d(x1, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
-      #  x2 = tf.contrib.layers.batch_norm(x2,activation_fn = activation)
-      #  x2 = tf.nn.dropout(x2, keep_prob)
+        print("x2 shape", x2)
+        x2 = tf.contrib.layers.batch_norm(x2,activation_fn = activation)
+        x2 = tf.nn.dropout(x2, keep_prob)
         encoder_layers.append(x2)
-        #size = (b_size,40,32,256)
+        #size = (b_size,20,16,128)
 
         x3 = tf.layers.conv2d(x2, filters=num_filters*4, kernel_size=5, strides=2, padding='same', activation=activation)
-      #  x3 = tf.contrib.layers.batch_norm(x3,activation_fn = activation)
-      #  x3 = tf.nn.dropout(x3, keep_prob)
+        print("x3 shape", x3)
+        x3 = tf.contrib.layers.batch_norm(x3,activation_fn = activation)
+        x3 = tf.nn.dropout(x3, keep_prob)
         encoder_layers.append(x3)
-        #size = (b_size,20,16,512)
+        #size = (b_size,10,8,256)
 
         x4 = tf.layers.conv2d(x3, filters=num_filters*8, kernel_size=5, strides=2, padding='same', activation=activation)
-      #  x4 = tf.contrib.layers.batch_norm(x4,activation_fn = activation)
-      #  x4 = tf.nn.dropout(x4, keep_prob)
+        print("x4 shape", x4)
+        x4 = tf.contrib.layers.batch_norm(x4,activation_fn = activation)
+        x4 = tf.nn.dropout(x4, keep_prob)
         encoder_layers.append(x4)
-        #size = (b_size,10,8,1024)
-
-        
+        #size = (b_size,5,4,512)
 
         x = tf.contrib.layers.flatten(x4)
-        #size = (b_size,10*8*1024)
+        #size = (b_size,5*4*1024)
 
         mn = tf.layers.dense(x, units=n_latent)
-        #mn = tf.contrib.layers.batch_norm(mn,activation_fn = tf.identity)  
+        mn = tf.contrib.layers.batch_norm(mn,activation_fn = tf.identity)  
         #size = (b_size,1024)
 
         sd = tf.layers.dense(x, units=n_latent)
-        #sd = tf.contrib.layers.batch_norm(sd,activation_fn = tf.nn.softplus)
-        #sd = tf.add(sd,1e-6)
+        sd = tf.contrib.layers.batch_norm(sd,activation_fn = tf.nn.softplus)
         #size = (b_size,1024)
 
         epsilon = tf.random_normal(tf.stack([batch_size, n_latent]))
@@ -786,147 +778,58 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
         #z  = tf.add(mn, tf.multiply(epsilon, tf.sqrt(tf.exp(sd))))
         z = tf.add(mn,tf.multiply(epsilon,tf.exp(sd)))
 
-    def f1(): return z
-    def f2(): return z_val
 
-    decoder_input = tf.cond(train_phase, f1, f2)
+    decoder_input = z #tf.cond(train_phase, f1, f2)
 
     with tf.variable_scope("var_decoder"):
         num_for_dense = num_filters * 4 * 5 * 8
         decoder_input.set_shape([batch_size,n_latent])
         x = tf.layers.dense(decoder_input, units=num_for_dense, activation=lrelu)   #(b_size,1024*10*8)
-        x = tf.reshape(x, [-1,5,4,num_filters*8])  #(b_size,10,8,1024)
+        print("x_new shape", x)
+        x = tf.reshape(x, [-1,5,4,num_filters*8])  #(b_size,5,4,512)
+        print("x_new_updated shape", x)
         x = tf.add(x,x4)
-
-
 
         #upsample
         x = tf.layers.conv2d_transpose(x, filters=num_filters*4, kernel_size=5, strides=2, padding='same')
-       # x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-       # x = tf.nn.dropout(x, keep_prob)
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        x = tf.nn.dropout(x, keep_prob)
         x = tf.add(x,x3)
-        #size = (b_size,20,16,512)
-
+        #size = (b_size,10,8,256)
 
         x = tf.layers.conv2d_transpose(x, filters=num_filters*2, kernel_size=5, strides=2, padding='same')
-       # x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
-       # x = tf.nn.dropout(x, keep_prob)
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        x = tf.nn.dropout(x, keep_prob)
         x = tf.add(x,x2)
-        #size = (b_size,40,32,256)
-
+        #size = (b_size,20,16,128)
 
         x = tf.layers.conv2d_transpose(x, filters=num_filters, kernel_size=5, strides=2, padding='same')
-       # x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
         x = tf.add(x,x1)
-        #size = (b_size,80,64,128)
+        #size = (b_size,40,32,64)
 
         x = tf.layers.conv2d_transpose(x, filters=num_filters, kernel_size=5, strides=2, padding='same')
-       # x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
+        x = tf.contrib.layers.batch_norm(x,activation_fn = activation)
         x = tf.add(x,x0)
-        #size = (b_size,80,64,128)
-
+        #size = (b_size,80,64,64)
 
         x = tf.layers.conv2d_transpose(x, filters=channels, kernel_size=5, strides=2, padding='same',activation = tf.nn.sigmoid)
-        img = x
-
-       # masks_comp = 1.0 - masks
-       # correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
-       # correct_image = upsample(correct_kspace, masks)
-       # img = correct_image
+        img = tf.add(x,features)
 
 
-    # gradient stuff
+    num_pixels = tf.size(img)
+    tr_jac = tf.constant(0.0)
 
-
-        def g1():
-            temp_grad = tf.gradients(img,features)
-            print("IMAGE SHAPE", img)
-            print("FEATURE SHAPE", features)
-
-          #  jacobian = jacobian_func(img,features)
-
-            #jacobian = gradients.jacobian(img,features)
-
-            #print("Testing Shape",jacobian)
-
-
-            gradient_slice = temp_grad[0][0,:,:,0]
-            #gradient_slice = temp_grad[0][0,:,:,0]
-
-
-            sing_vals = tf.linalg.svd(tf.reshape(gradient_slice,[160,128]),compute_uv = False)
-            #sing_vals = tf.zeros([64,1])
-
-            RSS = tf.cast(tf.reduce_mean(tf.square(tf.abs(img - features))), tf.float32)
-            MSE = tf.cast(tf.reduce_mean(tf.square(tf.abs(img - labels))), tf.float32)
-            
-            return sing_vals, RSS, MSE
-
-        #gradient_reshaped = tf.reshape(gradient_slice,[1,160,128,1])
-        #print("GRADIENT RESHAPED",gradient_reshaped)
-        #tf.summary.image("gradient_output_wrt_input",gradient_reshaped)
-
-        #gradient_reshaped = tf.reshape(gradient_reshaped,[160,128])
-
-        #frequency = tf.fft2d(tf.cast(gradient_reshaped,tf.complex64))
-
-        #split0, split1 = tf.split(frequency,[80,80],0)
-        #frequency = tf.concat([split1, split0],0)
-        #split0, split1 = tf.split(frequency,[64,64],1)
-        #frequency = tf.concat([split1,split0],1)
-
-        #frequency = tf.log(tf.abs(frequency) + 1e-10)
-        #frequency = tf.reshape(frequency,[1,160,128,1])
-
-        #print("FFT of gradient", frequency)
-        #tf.summary.image("FFT_of_gradient",frequency)
-
-
-        #sing_vals = s
-
-        
-
-        #s = tf.div(tf.subtract(s, tf.reduce_min(s)),tf.subtract(tf.reduce_max(s),tf.reduce_min(s)))
-        #s = tf.diag(s)
-        #s = tf.reshape(s,[1,128,128,1])
-        #tf.summary.image("Singular Values",s)
-        #return 0
-
-        def g2():
-            return tf.ones([128,1]), 0.0, 0.0
-       #     return 1
-            ### Do Nothing
-
-        sing_vals, RSS, MSE = tf.cond(print_bool,g1,g2)
-
-
-        #size = (b_size,160,128,2)
-
-
-
-
-
-    ### Data consistency
-    #img = tf.image.resize_images(img,[320,256])
-
-    def l1():
-        return img
-        masks_comp = 1.0 - masks
-        correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
-        correct_image = upsample(correct_kspace, masks)
-        return correct_image
-
-    def l2():
-        return img
-        masks_comp = 1.0 - masks
-        correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
-        correct_image = upsample(correct_kspace, masks)
-        return correct_image
-        
+    #data consistency
+    masks_comp = 1.0 - masks
+    correct_kspace = downsample(labels, masks) + downsample(img, masks_comp)
+    correct_image = upsample(correct_kspace, masks)
+    img = correct_image
     
-    output = tf.cond(train_phase,l1,l2)
+    RSS = tf.cast(tf.reduce_mean(tf.square(tf.abs(img - features))), tf.float32)
+    MSE = tf.cast(tf.reduce_mean(tf.square(tf.abs(img - labels))), tf.float32)
 
-
+    output = img
     output_layers = [output]
 
     new_vars = tf.global_variables()
@@ -935,7 +838,7 @@ def variational_autoencoder(sess,features,labels,masks,train_phase,z_val,print_b
     print("Output shape", output.shape)
     print("Output type", type(output))
 
-    return output, gen_vars, output_layers, mn, sd, sing_vals, RSS, MSE
+    return output, gen_vars, output_layers, mn, sd, tr_jac, RSS, MSE
 
 
 def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channels = 2, layer_output_skip=5):
@@ -971,35 +874,6 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
             convolved = conv(rectified, out_channels, stride=2)
             output = batchnorm(convolved)
             layers.append(output)
-
-    
-    ###  LATENT SPACE
-
-    #latent_code = layers[-1]
-    #print("Latent code shape is:")
-    #print(latent_code.shape)
-
-
-    ###
-    #train_phase = tf.placeholder_with_default(True, shape=())
-
-
-   #b.eval(session = sess)
-    #b = sess.run(encoder_4)
-    #with sess:
-    #    temp = tf.Variable(layers[-1],name = "temp")
-    #    b = layers[-1].eval()
-    #init = tf.variables_initializer([temp])
-    #sess.run(temp)
-   # with tf.Session() as sess:
-    #    temp = temp.eval(session = sess)
-   # temp_reshape = tf.reshape(temp,[4,-1])
-   # inds = tf.argmax(temp_reshape,axis = 1)
-   # val = inds[0:1]
-    #val = tf.Variable(inds[0:1],name = "val")
-    #init = tf.variables_initializer([val])
-    #sess.run(init)
-    #print(val)
 
 
     with tf.variable_scope("latent"):
@@ -1125,107 +999,6 @@ def _generator_encoder_decoder(sess, features, labels, masks,train_phase,channel
 
 
 
-
-
-
-
-    #hard data consistency
-"""
-    masks_comp = 1.0 - masks
-    correct_kspace = downsample(labels, masks) + downsample(layers[-1], masks_comp)
-    correct_image = upsample(correct_kspace, masks)
-    layers.append(correct_image)
-"""
-
-
-
-
-    #adversarial_gradients = gradients_out_in(layers[-1],features)
-
-
-
-
-
-"""
-
-def _generator_model_with_pool(sess, features, labels, channels, layer_output_skip=5):
-    mapsize = 3
-    res_units  = [64, 128, 128] #[64, 32, 16]#[256, 128, 96]
-    layer_pooling = [1, 1, 0]
-    print('use resnet conv-decov with pooling parameters:', res_units, layer_pooling)
-    
-    old_vars = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
-
-    # See Arxiv 1603.05027
-    model = Model('GEN', features)
-    list_layer_before_pool=[]
-    for index_layer in range(len(res_units)-1):
-        nunits  = res_units[index_layer]
-
-        for j in range(2):
-            model.add_residual_block(nunits, mapsize=mapsize)
-
-        list_layer_before_pool.append(model.outputs[-1])
-        
-        # conv 
-        # model.add_batch_norm()
-        # model.add_relu()
-        # model.add_conv2d_transpose(nunits, mapsize=mapsize, stride=1, stddev_factor=1.)
-        model.add_batch_norm()
-        model.add_relu()
-
-        # pooling/striding
-        stride = layer_pooling[index_layer]+1
-        model.add_conv2d(nunits, mapsize=mapsize, stride=stride, stddev_factor=1.)
-
-    print('list_layer_before_pool', list_layer_before_pool)
-    print('model.outputs', model.outputs)
-
-    for index_layer_rev in range(len(res_units)-1):
-        index_layer = len(list_layer_before_pool)-1-index_layer_rev
-        nunits  = res_units[index_layer]
-
-        for j in range(2):
-            model.add_residual_block(nunits, mapsize=mapsize)
-
-        # up-pool cov
-        if layer_pooling[index_layer]:
-            model.add_upscale()
-
-        model.add_batch_norm()
-        model.add_relu()
-        model.add_conv2d_transpose(nunits, mapsize=mapsize, stride=1, stddev_factor=1.)
-
-        # concat
-        model.add_concat(list_layer_before_pool[index_layer])
-        
-
-    # conv 
-    nunits = res_units[-1]
-    model.add_conv2d(nunits, mapsize=mapsize, stride=1, stddev_factor=2.)
-    model.add_relu()
-
-    # filter to channel number
-    model.add_conv2d(nunits, mapsize=1, stride=1, stddev_factor=2.)
-    model.add_relu()
-
-    # output
-    model.add_conv2d(channels, mapsize=1, stride=1, stddev_factor=1.)
-    model.add_sigmoid()
-
-    # get variables
-    new_vars  = tf.global_variables()#tf.all_variables() , all_variables() are deprecated
-    gene_vars = list(set(new_vars) - set(old_vars))
-
-    # select subset of layers
-    output_layers = [model.outputs[0]] + model.outputs[1:-1][::layer_output_skip] + [model.outputs[-1]]
-
-    return model.get_output(), gene_vars, output_layers
-
-"""
-
-
-
 ### Resnet Architecture
 
 def _generator_model_with_scale(sess, features, labels, masks, channels, layer_output_skip=5,
@@ -1329,7 +1102,7 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     channels  = int(features.get_shape()[3])
     n_latent = 1024
     temp_zeros = tf.zeros([FLAGS.batch_size,n_latent],tf.float32)
-
+    num_pixels = tf.size(features)
     #print('channels', features.get_shape())
 
     gene_minput = tf.placeholder_with_default(features, shape=[FLAGS.batch_size, rows, cols, channels])
@@ -1337,8 +1110,8 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     train_phase = tf.placeholder_with_default(True, shape=())
     z_val = tf.placeholder_with_default(temp_zeros, shape= temp_zeros.shape)
     print_bool = tf.placeholder_with_default(False, shape=())
-
-    features = gene_minput
+    adjusted_gene_output = tf.placeholder_with_default(tf.zeros([FLAGS.batch_size, rows, cols, channels]), shape=[FLAGS.batch_size, rows, cols, channels])
+    num_to_average = 100
 
     architecture = 'vae' #only deal with the variational autoencoder
 
@@ -1373,9 +1146,12 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
     mask_list = []
     mask_list_0 = []
     eta = []
+    dot_prod_sum = 0
 
     kappa = []
     nmse = []
+
+
 
     with tf.variable_scope('gene_layer') as scope:
 
@@ -1385,18 +1161,32 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
         for i in range(FLAGS.num_iteration):
 
              #train
-             gene_output, gene_var_list, gene_layers, mn, sd, sing_vals, RSS, MSE = function_generator(sess, gene_output, labels, masks,train_phase,z_val,print_bool)
+             gene_output, gene_var_list, gene_layers, mn, sd, tr_jac, RSS, MSE = function_generator(sess, gene_output, labels, masks,train_phase,z_val,print_bool)
              #gene_output, gene_var_list, gene_layers = function_generator(sess, gene_output, labels, masks,train_phase)
              gene_layers_list.append(gene_layers)
              gene_output_list.append(gene_output)
              if i == 0:
                 gene_Var_list = gene_var_list
 
-             
              scope.reuse_variables()
-             
+
+             #Jacobian trace approximation for SURE
+             dot_prod_sum = 0
+             for j in range(num_to_average):
+                 b = tf.random_normal(tf.shape(features))
+                 epsilon = tf.reduce_max(features) / 1000.0  #epsilon value can be adjusted as needed
+                 adjusted_features = tf.add(features, tf.scalar_mul(epsilon, b))
+                 adjusted_gene_output_temp, _, _, _, _,_, _, _  = function_generator(sess, adjusted_features, labels, masks,train_phase,z_val,print_bool)
+                 difference = tf.subtract(adjusted_gene_output_temp, gene_output)
+                 scaled_difference = tf.divide(difference, epsilon)
+                 dot_prod = tf.multiply(b, scaled_difference)
+                 dot_prod_sum = dot_prod_sum + tf.reduce_sum(dot_prod)
+             dot_prod_sum  = tf.divide(dot_prod_sum, num_to_average)
+
+
+             scope.reuse_variables()         
              #test
-             gene_moutput, _ , gene_mlayers, mn1, sd1, sing_vals1, RSS1, MSE1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val,print_bool)
+             gene_moutput, _ , gene_mlayers, mn1, sd1, tr_jac1, RSS1, MSE1= function_generator(sess, gene_moutput, label_minput, masks,train_phase,z_val,print_bool)
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              gene_mlayers_list.append(gene_mlayers)
              gene_moutput_list.append(gene_moutput)
@@ -1404,23 +1194,22 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
 
              scope.reuse_variables()
              #evaluate at the groun-truth solution
-             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2, sing_vals2, RSS2, MSE2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val,print_bool)
+             gene_moutput_0, _ , gene_mlayers_0, mn2, sd2, tr_jac2, RSS2, MSE2 = function_generator(sess, label_minput, label_minput, masks,train_phase,z_val,print_bool)
 
 
              #gene_moutput, _ , gene_mlayers = function_generator(sess, gene_moutput, label_minput, masks,train_phase)
              #mask_list_0 = gene_mlayers_0[3]
              """
-
              #nmse_t = tf.square(tf.divide(tf.norm(gene_moutput - labels), tf.norm(labels)))
              #nmse.append(nmse_t)
              #kappa_t = tf.divide(tf.norm(gene_moutput - labels), tf.norm(gene_mlayers[0] - labels))
              #kappa.append(kappa_t)
-
              ##convergence rate kappa_t = ||x_{t+1}-x_*||/||x_t-x_*||
              #kappa_t = tf.divide(tf.norm(gene_mlayers[4] - labels), tf.norm(gene_mlayers[0] - labels))
              #nmse_t = tf.divide(tf.norm(gene_mlayers[4] - labels), tf.norm(labels))
              #kappa.append(kappa_t)
-             #nmse.append(nmse_t)
+    
+    #nmse.append(nmse_t)
              """
 
 
@@ -1449,12 +1238,19 @@ def create_model(sess, features, labels, masks, architecture='resnet'):
             
         disc_fake_output, _, _ = _discriminator_model(sess, features, gene_output_real, hybrid_disc=FLAGS.hybrid_disc)
 
+    #collect other quantities for assessing SURE
+    RSS_im = tf.square(tf.abs(gene_output - features))
+    MSE_im = tf.square(tf.abs(gene_output - labels))
+    tr_jac = dot_prod_sum / tf.cast(num_pixels,tf.float32)
+    dof_pixel_map = scaled_difference
+    tf.summary.scalar('train_tr_jac', tr_jac)
+    tf.summary.scalar('train_rss_jac', RSS)
+    tf.summary.scalar('train_MSE', MSE)
+    tf_grads = tf.gradients(gene_output, features)
 
-
-
-    return [MSE, RSS, sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
+    return [MSE, RSS, tr_jac,dof_pixel_map,RSS_im, MSE_im, tf_grads, features, labels,  mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list,
             gene_output, gene_output_list, gene_Var_list, gene_layers_list, gene_mlayers_list, mask_list, mask_list_0,
-            disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool, z_val,disc_layers, eta, nmse, kappa]   
+            disc_real_output, disc_fake_output, disc_var_list, train_phase, print_bool, z_val,disc_layers, eta, nmse, kappa]   
 
 
 # SSIM
@@ -1589,17 +1385,18 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
     gene_mse_loss = tf.add(FLAGS.gene_l1l2_factor * gene_l1_loss, 
                         (1.0 - FLAGS.gene_l1l2_factor) * gene_l2_loss, name='gene_mse_loss')
 
-
+    gene_mse_loss = tf.divide(gene_mse_loss,tf.norm(features))
     print("GENE",gene_output)
     print("LABEL",labels)
     print("LOSS",gene_mse_loss)
 
 
     # Add in KL divergence term to enforce normal constraint
+    #eta = 1e-4
 
     latent_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + sd - tf.square(mn) - tf.exp(sd), 1))
 
-    gene_mse_loss = gene_mse_loss #+ 1e-4 * latent_loss
+    gene_mse_loss = gene_mse_loss #+ eta * latent_loss
 
     #ssim loss
     gene_ssim_loss = loss_DSSIS_tf11(labels, gene_output)
@@ -1636,58 +1433,6 @@ def create_generator_loss(disc_output, gene_output, gene_output_list, features, 
     list_gene_lose = [gene_mixmse_loss, gene_mse_loss, gene_l2_loss, gene_l1_loss, gene_ssim_loss, # regression loss
                         gene_dc_loss, gene_fool_loss, gene_non_mse_l2, gene_loss]
 
-
-
-
-    #GRadient stuff
-    #print("Input size", features.shape)
-    #print("Output size", gene_output.shape)
-    #gradient = tf.gradients(gene_output,features)
-    #print("GRADIENT",gradient)
-
-    #gradient_slice = gradient[0][:,:,:,0]
-    #gradient_reshaped = tf.reshape(gradient_slice,[1,160,128,1])
-    #gradient_reshaped = gradient_reshaped /(tf.norm(gradient_reshaped) + 1e-12)
-    #print("GRADIENT RESHAPED",gradient_reshaped)
-    #tf.summary.image("gradient",gradient_reshaped)
-    #features_viz = features[:,:,:,0]
-    #features_viz = tf.reshape(features_viz,[1,160,128,1])
-    #tf.summary.image("features",features_viz)
-
-    #features_viz = tf.reshape(features_viz,[160,128])
-
-    #frequency = tf.fft2d(tf.cast(features_viz,tf.complex64))
-
-    #split0, split1 = tf.split(frequency,[80,80],0)
-    #frequency = tf.concat([split1, split0],0)
-
-    #split0, split1 = tf.split(frequency,[64,64],1)
-    #frequency = tf.concat([split1,split0],1)
-
-    #frequency = tf.log(tf.abs(frequency) + 1e-10) 
-    #frequency = tf.reshape(frequency,[1,160,128,1])
-    #print("FFT of input", frequency)
-    #tf.summary.image("FFT_of_input",frequency)
-
-    #output_viz = gene_output[:,:,:,0]
-    #output_viz = tf.reshape(output_viz,[1,160,128,1])
-    #tf.summary.image("output",output_viz)
-
-    #output_viz = tf.reshape(output_viz,[160,128])
-
-    #frequency = tf.fft2d(tf.cast(output_viz,tf.complex64))
-
-    #split0, split1 = tf.split(frequency,[80,80],0)
-    #frequency = tf.concat([split1, split0],0)
-
-    #split0, split1 = tf.split(frequency,[64,64],1)
-    #frequency = tf.concat([split1,split0],1)
-
-    #frequency = tf.log(tf.abs(frequency) + 1e-10) 
-    #frequency = tf.reshape(frequency,[1,160,128,1])
-    #print("FFT of output", frequency)
-    #tf.summary.image("FFT_of_output",frequency)
-
     # log to tensorboard
     #tf.summary.scalar('gene_non_mse_loss', gene_non_mse_l2)
     tf.summary.scalar('gene_fool_loss', gene_non_mse_l2)
@@ -1721,26 +1466,19 @@ def create_discriminator_loss(disc_real_output, disc_fake_output, real_data = No
     fake_data = tf.complex(fake_data[:,:,:,0], fake_data[:,:,:,1])
     fake_data = tf.abs(fake_data)
     fake_data = tf.reshape(fake_data, [FLAGS.batch_size, rows, cols, 1])   
-
     real_data = tf.complex(real_data[:,:,:,0], real_data[:,:,:,1])
     real_data = tf.abs(real_data)
     real_data = tf.reshape(real_data, [FLAGS.batch_size, rows, cols, 1]) 
-
     disc_real_loss = tf.reduce_mean(disc_real_output)
     disc_fake_loss = tf.reduce_mean(disc_fake_output)
-
     disc_cost = disc_fake_loss - disc_real_loss
-
     # generate noisy inputs 
     alpha = tf.random_uniform(shape=[FLAGS.batch_size, 1, 1, 1], minval=0.,maxval=1.)    
     interpolates = real_data + (alpha*(fake_data - real_data))
-
     with tf.variable_scope('disc', reuse=True) as scope:
-
         interpolates_disc_output, _, _ = _discriminator_model(None, None, interpolates, hybrid_disc=FLAGS.hybrid_disc)
         gradients = tf.gradients(interpolates_disc_output, [interpolates])[0] 
         gradients = tf.layers.flatten(gradients)
-
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))  
     gradient_penalty = tf.reduce_mean((slopes - 1.)**2)
     disc_loss = tf.add(disc_cost, 1 * gradient_penalty, name='disc_loss')
@@ -1748,7 +1486,6 @@ def create_discriminator_loss(disc_real_output, disc_fake_output, real_data = No
     tf.summary.scalar('disc_total_loss',disc_loss)
     tf.summary.scalar('disc_real_loss',disc_real_loss) 
     tf.summary.scalar('disc_fake_loss',disc_fake_loss) 
-
     return disc_loss, disc_real_loss, disc_fake_loss, gradient_penalty
 """
 
@@ -1781,12 +1518,10 @@ def create_optimizers(gene_loss, gene_var_list,
     ##method 1. the right method
     grads_and_vars = gene_opti.compute_gradients(gene_loss)  #, gene_var_list)
     #[print('grad', grad) for grad, var in grads_and_vars]
-
     def clipNotNone(grads):
         if grads is None:
             return grads
         return tf.clip_by_value(grads,-1000000000., 1000000000.)
-
     capped_grads_and_vars = [(clipNotNone(grad),var) for grad,var in grads_and_vars]
     gene_minimize = gene_opti.apply_gradients(capped_grads_and_vars)
     '''
@@ -1806,6 +1541,3 @@ def create_optimizers(gene_loss, gene_var_list,
     disc_minimize = disc_opti.minimize(disc_loss, var_list=disc_var_list, name='disc_loss_minimize', global_step=global_step)
     
     return (global_step, learning_rate, gene_minimize,disc_minimize)
-
-
-
