@@ -1,4 +1,4 @@
-
+# File for processing input images
 
 import tensorflow as tf
 import numpy as np
@@ -19,8 +19,8 @@ def generate_mask_alpha(size=[128,128], r_factor_designed=5.0, r_alpha=3, axis_u
     num_phase_sampled = int(np.floor(num_phase_encode/r_factor_designed))
     # coordinate
     coordinate_normalized = np.array(range(num_phase_encode))
-    coordinate_normalized = np.abs(coordinate_normalized-num_phase_encode/2)/(num_phase_encode/2.0)
-    prob_sample = coordinate_normalized**r_alpha
+    coordinate_normalized = np.abs(coordinate_normalized - num_phase_encode/2) / (num_phase_encode/2.0)
+    prob_sample = (coordinate_normalized + 0.5)**(-r_alpha)
     prob_sample = prob_sample/sum(prob_sample)
     # sample
     index_sample = np.random.choice(num_phase_encode, size=num_phase_sampled, 
@@ -168,4 +168,4 @@ def setup_inputs_one_sources(sess, filenames_input, filenames_output, image_size
     print(features.shape)
     print(labels.shape)
     print(masks.shape)
-    return features, labels, masks    
+    return features, labels, masks 
