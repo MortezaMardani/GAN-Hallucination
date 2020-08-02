@@ -1,70 +1,5 @@
-"""
-train on GAN-CS 
-example
-export CUDA_VISIBLE_DEVICES=0
-python srez_main.py --dataset_input /home/enhaog/GANCS/srez/dataset_MRI/phantom \
-                    --dataset_output  /home/enhaog/GANCS/srez/dataset_MRI/phantom \
-                    --run train \
-                    --gene_mse_factor 1.0
+# Main file: loads/splits data and trains model
 
-python3 srez_main.py --dataset_input /home/enhaog/GANCS/srez/dataset_MRI/phantom --batch_size 8 --run train --summary_period 123 --sample_size 256 --train_time 10  --train_dir train_save_all                  
-python srez_main.py --dataset_input /home/enhaog/GANCS/srez/dataset_MRI/phantom2 \
-                    --batch_size 4 --run train --summary_period 125 \
-                    --sample_size 256 \
-                    --train_time 10  \
-                    --sample_test 32 --sample_train 1000 \
-                    --train_dir tmp_specify_train  \
-                    --R_factor 8 \
-                    --R_alpha 3 \
-                    % R_seed<0 means non-fixed random seed
-                    --R_seed -1 
-
-#DCE
-python srez_main.py --run train \
-                    --dataset_input /home/enhaog/GANCS/srez/dataset_MRI/abdominal_DCE \
-                    --sample_size 200 --sample_size_y 100 \
-                    --sampling_pattern /home/enhaog/GANCS/srez/dataset_MRI/sampling_pattern_DCE/mask_2dvardesnity_radiaview_4fold.mat \
-                    --batch_size 8  --summary_period 125 \
-                    --sample_test 32 --sample_train 30000 \
-                    --train_time 300  \
-                    --train_dir train_DCE_0508_R4_MSE01 \
-                    --gene_mse_factor 0.1    \
-                    --gpu_memory_fraction 0.5
-
-# with sub sampling
-python srez_main.py --run train \
-                    --dataset_input /home/enhaog/GANCS/srez/dataset_MRI/abdominal_DCE \
-                    --sample_size 200 --sample_size_y 100 \
-                    --sampling_pattern /home/enhaog/GANCS/srez/dataset_MRI/sampling_pattern_DCE/mask_2dvardesnity_radiaview_4fold.mat \
-                    --batch_size 8  --summary_period  100 \
-                    --sample_test 604 --sample_train -1 \
-                    --subsample_test 64 --subsample_train 30000 \
-                    --train_time 3  \
-                    --train_dir train_DCE_0509_R4_MSE10 \
-                    --gene_mse_factor 1.0    \
-                    --gpu_memory_fraction 0.4 \
-                    --hybrid_disc 0   
-
-
-python3 srez_main.py  --run train \
-                      --dataset_train /mnt/raid5/morteza/datasets/Abdominal-DCE-616cases/train\   
-                      --dataset_test /mnt/raid5/morteza/datasets/Abdominal-DCE-616cases/test\   
-                      --sample_size 256 \  
-                      --sample_size_y 128 \
-                      --batch_size 8  \ 
-                      --summary_period  1000 \
-                      --sample_test 128 \
-                      --sample_train -1 \
-                      --subsample_test 8 \
-                      --subsample_train 10000 \
-                      --train_time 6000 \ 
-                      --R_seed -1 \
-                      --R_alpha 2 \ 
-                      --R_factor 10 \
-                      --train_dir /mnt/raid5/morteza/GANCS-MRI/train_save_all
-
-
-"""
 #import srez_demo
 import srez_input
 import srez_model
@@ -84,15 +19,16 @@ FLAGS = tf.app.flags.FLAGS
 
 # Configuration (alphabetically)
 
-tf.app.flags.DEFINE_integer('num_iteration', 4,
+tf.app.flags.DEFINE_integer('num_iteration', 1,
                             "Number of repeatitions for the generator network.")
 
-tf.app.flags.DEFINE_integer('batch_size', 16,
+tf.app.flags.DEFINE_integer('batch_size', 4,
                             "Number of samples per batch.")
 
 tf.app.flags.DEFINE_string('checkpoint_dir', 'checkpoint',
                            "Output folder where checkpoints are dumped.")
 
+tf.app.flags.DEFINE_string('filename_prefix','','Path for saving output files')
 tf.app.flags.DEFINE_integer('checkpoint_period', 4000,
                             "Number of batches in between checkpoints")
 
@@ -135,7 +71,7 @@ tf.app.flags.DEFINE_float('gene_mse_factor', 0.9,
 tf.app.flags.DEFINE_float('learning_beta1', 0.5,
                           "Beta1 parameter used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_start', 0.00006,
+tf.app.flags.DEFINE_float('learning_rate_start', 0.00005,
                           "Starting learning rate used for AdamOptimizer")  #0.000001
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
@@ -144,10 +80,10 @@ tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
 tf.app.flags.DEFINE_bool('log_device_placement', False,
                          "Log the device where variables are placed.")
 
-tf.app.flags.DEFINE_integer('sample_size', 128,
+tf.app.flags.DEFINE_integer('sample_size', 160,
                             "Image sample size in pixels. Range [64,128]")
 
-tf.app.flags.DEFINE_integer('sample_size_y', -1,
+tf.app.flags.DEFINE_integer('sample_size_y', 128,
                             "Image sample size in pixels. by default the sample as sample_size")
 
 tf.app.flags.DEFINE_integer('summary_period', 5000,
@@ -204,7 +140,7 @@ tf.app.flags.DEFINE_integer('R_seed', -1,
 tf.app.flags.DEFINE_string('sampling_pattern', '',
                             "specifed file path for undersampling")
 
-tf.app.flags.DEFINE_float('gpu_memory_fraction', 1,
+tf.app.flags.DEFINE_float('gpu_memory_fraction', 1.0,
                             "specified the max gpu fraction used per device")
 
 tf.app.flags.DEFINE_integer('hybrid_disc', 0,
@@ -255,7 +191,6 @@ def prepare_dirs(delete_train_dir=False, shuffle_filename=True):
     if shuffle_filename:
         random.shuffle(filenames)
     filenames = [os.path.join(FLAGS.dataset_train, f) for f in filenames]
-
     return filenames
 
 def get_filenames(dir_file='', shuffle_filename=False):
@@ -420,9 +355,9 @@ def _train():
 
     # randomly sub-sample for test    
     if FLAGS.subsample_test > 0:
-        index_sample_test_selected = random.sample(range(len(test_filenames_input)), FLAGS.subsample_test)
         print(len(test_filenames_input))
         print(FLAGS.subsample_test)
+        index_sample_test_selected = random.sample(range(len(test_filenames_input)), FLAGS.subsample_test)
         if not FLAGS.permutation_test:
             index_sample_test_selected = sorted(index_sample_test_selected)
         test_filenames_input = [test_filenames_input[x] for x in index_sample_test_selected]
@@ -433,19 +368,16 @@ def _train():
 
     # get undersample mask
     from scipy import io as sio
+    print("CHecking mask flag: ", FLAGS.sampling_pattern)
     try:
         content_mask = sio.loadmat(FLAGS.sampling_pattern)
         key_mask = [x for x in content_mask.keys() if not x.startswith('_')]
         mask = content_mask[key_mask[0]]
     except:
+        print("HIT WRONG ONE")
         mask = None
 
-    print(len(train_filenames_input))
-    print(len(train_filenames_output))
-    print(len(test_filenames_input))
-    print(len(test_filenames_output))
 
-    mask = None
 
     # Setup async input queues
     train_features, train_labels, train_masks = srez_input.setup_inputs_one_sources(sess, train_filenames_input, train_filenames_output, 
@@ -485,7 +417,7 @@ def _train():
                            tf.random_normal(train_features.get_shape(), stddev=noise_level)
 
     # Create and initialize model
-    [MSE, RSS,sing_vals,mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
+    [MSE, RSS,tr_jac, dof_pixel_map, RSS_im, MSE_im,  tf_grads, features, labels, mn, sd, gene_minput, label_minput, gene_moutput, gene_moutput_list, \
      gene_output, gene_output_list, gene_var_list, gene_layers_list, gene_mlayers_list, gene_mask_list, gene_mask_list_0, \
      disc_real_output, disc_fake_output, disc_var_list, train_phase,print_bool,z_val,disc_layers, eta, nmse, kappa] = \
             srez_model.create_model(sess, noisy_train_features, train_labels, train_masks, architecture=FLAGS.architecture)
@@ -508,7 +440,7 @@ def _train():
 
 
     #restore variables from checkpoint
-    filename = 'checkpoint_new.txt'
+    filename = 'checkpoint_new' + FLAGS.sampling_pattern + ".txt"
     filename = os.path.join(FLAGS.checkpoint_dir, filename)
     metafile=filename+'.meta'
 
@@ -520,8 +452,6 @@ def _train():
     else:
         print("No checkpoint `%s', train from scratch" % (filename,))
         sess.run(tf.global_variables_initializer())
-
-   
 
    #print("No checkpoint `%s', train from scratch" % (filename,))
     #print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])) #number of parameters in model
@@ -542,4 +472,3 @@ def main(argv=None):
 
 if __name__ == '__main__':
   tf.app.run()
-
